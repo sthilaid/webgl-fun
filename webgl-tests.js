@@ -1,3 +1,4 @@
+// based on https://developer.mozilla.org/en-US/docs/Web/API/WebGL_API/Tutorial
 
 function initGL(gl) {
     gl.clearColor(0.0, 0.0, 0.0, 1.0);  // Clear to black, fully opaque
@@ -7,17 +8,28 @@ function initGL(gl) {
 }
 
 function initShaderProgram(gl, vsSource, fsSource) {
-    const vertexShader = loadShader(gl, gl.VERTEX_SHADER, vsSource);
-    const fragmentShader = loadShader(gl, gl.FRAGMENT_SHADER, fsSource);
+    function loadShader(gl, type, source) {
+        const shader = gl.createShader(type);
 
-    // Create the shader program
+        gl.shaderSource(shader, source);
+        gl.compileShader(shader);
 
-    const shaderProgram = gl.createProgram();
+        if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+            alert('An error occurred compiling the shaders: ' + gl.getShaderInfoLog(shader));
+            gl.deleteShader(shader);
+            return null;
+        }
+
+        return shader;
+    }
+
+    const vertexShader      = loadShader(gl, gl.VERTEX_SHADER, vsSource);
+    const fragmentShader    = loadShader(gl, gl.FRAGMENT_SHADER, fsSource);
+
+    const shaderProgram     = gl.createProgram();
     gl.attachShader(shaderProgram, vertexShader);
     gl.attachShader(shaderProgram, fragmentShader);
     gl.linkProgram(shaderProgram);
-
-    // If creating the shader program failed, alert
 
     if (!gl.getProgramParameter(shaderProgram, gl.LINK_STATUS)) {
         alert('Unable to initialize the shader program: ' + gl.getProgramInfoLog(shaderProgram));
@@ -27,27 +39,58 @@ function initShaderProgram(gl, vsSource, fsSource) {
     return shaderProgram;
 }
 
-function loadShader(gl, type, source) {
-    const shader = gl.createShader(type);
-
-    // Send the source to the shader object
-    gl.shaderSource(shader, source);
-
-    // Compile the shader program
-    gl.compileShader(shader);
-
-    // See if it compiled successfully
-    if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-        alert('An error occurred compiling the shaders: ' + gl.getShaderInfoLog(shader));
-        gl.deleteShader(shader);
-        return null;
+class SceneObject {
+    constructor(shader, buffers, update, draw) {
+        this.shader     = shader;
+        this.buffers    = buffers;
+        this.update     = update;
+        this.draw       = draw;
+        this.mat        = mat4.create();
     }
 
-    return shader;
+    function render(gl, dt) {
+
+        const normalize = false;
+        const stride = 0;
+        const offset = 0;
+        gl.bindBuffer(gl.ARRAY_BUFFER, buffers.position.buffer);
+        gl.vertexAttribPointer(programInfo.attribLocations.vertexPosition,
+                               buffers.position.comp,
+                               buffers.position.type,
+                               normalize, stride, offset);
+        gl.enableVertexAttribArray(programInfo.attribLocations.vertexPosition);
+
+        const numComponents = 4;
+        const type = gl.FLOAT;
+        const normalize = false;
+        const stride = 0;
+        const offset = 0;
+
+        gl.bindBuffer(gl.ARRAY_BUFFER, buffers.color);
+        gl.vertexAttribPointer(programInfo.attribLocations.vertexColor,
+                               numComponents, type, normalize, stride, offset)
+        gl.enableVertexAttribArray(programInfo.attribLocations.vertexColor);
+
+
+        gl.useProgram(programInfo.program);
+
+        gl.uniformMatrix4fv(
+            programInfo.uniformLocations.projectionMatrix,
+            false,
+            projectionMatrix);
+
+        gl.uniformMatrix4fv(
+            programInfo.uniformLocations.modelViewMatrix,
+            false,
+            modelViewMatrix);
+
+        const offset = 0;
+        const vertexCount = 4;
+        gl.drawArrays(gl.TRIANGLE_STRIP, offset, vertexCount);
+    }
 }
 
-function initBuffers(gl) {
-
+function initPlaneBuffers(gl) {
     const positions = [
         1.0,  1.0,
         -1.0,  1.0,
@@ -69,8 +112,8 @@ function initBuffers(gl) {
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(colors), gl.STATIC_DRAW);
 
     return {
-        position:   positionBuffer,
-        color:      colorBuffer,
+        position:   {buffer: positionBuffer,    comp: 2, type: gl.FLOAT},
+        color:      {buffer: colorBuffer,       comp: 4, type: gl.FLOAT},
     };
 }
 
@@ -211,7 +254,7 @@ function main() {
 
     // Here's where we call the routine that builds all the
     // objects we'll be drawing.
-    const buffers = initBuffers(gl);
+    const buffers = initPlaneBuffers(gl);
 
     var then = 0;
     function render(now) {
