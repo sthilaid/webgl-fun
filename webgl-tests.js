@@ -62,8 +62,59 @@ function initPlaneBuffers(gl) {
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(colors), gl.STATIC_DRAW);
 
     return {
+        type:           gl.TRIANGLE_STRIP,
         vertexCount:    4,
         position:       {buffer: positionBuffer,    comp: 2, type: gl.FLOAT},
+        indices:        false,
+        color:          {buffer: colorBuffer,       comp: 4, type: gl.FLOAT},
+    };
+}
+
+
+function initCubeBuffers(gl) {
+    const positions = [1.0, 1.0, 1.0,       // 0
+                       1.0, -1.0, 1.0,      // 1
+                       -1.0, 1.0, 1.0,      // 2
+                       -1.0, -1.0, 1.0,     // 3
+                       1.0, 1.0, -1.0,      // 4
+                       1.0, -1.0, -1.0,     // 5
+                       -1.0, 1.0, -1.0,     // 6
+                       -1.0, -1.0, -1.0,    // 7
+    ];
+    const positionBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(positions), gl.STATIC_DRAW);
+
+    const indices = [0, 1, 3, 0, 3, 2, // front
+                     0, 5, 1, 0, 4, 5, // right
+                     4, 6, 7, 4, 7, 5, // back
+                     6, 2, 3, 6, 3, 7, // left
+                     6, 4, 0, 6, 0, 2, // top
+                     1, 5, 7, 1, 7, 3, // bottom
+    ];
+    const indicesBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indicesBuffer);
+    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(indices), gl.STATIC_DRAW);
+
+    const colors = [
+        0.0, 0.0, 1.0, 1.0,
+        0.0, 1.0, 0.0, 1.0,
+        1.0, 0.0, 0.0, 1.0,
+        0.0, 0.0, 0.0, 1.0,
+        1.0, 0.0, 1.0, 1.0,
+        1.0, 1.0, 0.0, 1.0,
+        1.0, 0.0, 1.0, 1.0,
+        0.0, 1.0, 1.0, 1.0,
+    ];
+    const colorBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, colorBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(colors), gl.STATIC_DRAW);
+
+    return {
+        type:           gl.TRIANGLES,
+        vertexCount:    indices.length,
+        position:       {buffer: positionBuffer,    comp: 3, type: gl.FLOAT},
+        indices:        {buffer: indicesBuffer,     comp: 3, type: gl.UNSIGNED_SHORT},
         color:          {buffer: colorBuffer,       comp: 4, type: gl.FLOAT},
     };
 }
@@ -86,20 +137,32 @@ class SceneObject {
         const offset = 0;
 
         // Vertex buffer
-        gl.bindBuffer(gl.ARRAY_BUFFER, this.buffers.position.buffer);
-        gl.vertexAttribPointer(this.shaderProgram.attribLocations.vertexPosition,
-                               this.buffers.position.comp,
-                               this.buffers.position.type,
-                               normalize, stride, offset);
-        gl.enableVertexAttribArray(this.shaderProgram.attribLocations.vertexPosition);
+        if (this.buffers.position)
+        {
+            gl.bindBuffer(gl.ARRAY_BUFFER, this.buffers.position.buffer);
+            gl.vertexAttribPointer(this.shaderProgram.attribLocations.vertexPosition,
+                                   this.buffers.position.comp,
+                                   this.buffers.position.type,
+                                   normalize, stride, offset);
+            gl.enableVertexAttribArray(this.shaderProgram.attribLocations.vertexPosition);
+        }
+
+        // indices buffer
+        if (this.buffers.indices)
+        {
+            gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.buffers.indices.buffer);
+        }
 
         // Color buffer
-        gl.bindBuffer(gl.ARRAY_BUFFER, this.buffers.color.buffer);
-        gl.vertexAttribPointer(this.shaderProgram.attribLocations.vertexColor,
-                               this.buffers.color.comp,
-                               this.buffers.color.type,
-                               normalize, stride, offset)
-        gl.enableVertexAttribArray(this.shaderProgram.attribLocations.vertexColor);
+        if (this.buffers.color)
+        {
+            gl.bindBuffer(gl.ARRAY_BUFFER, this.buffers.color.buffer);
+            gl.vertexAttribPointer(this.shaderProgram.attribLocations.vertexColor,
+                                   this.buffers.color.comp,
+                                   this.buffers.color.type,
+                                   normalize, stride, offset)
+            gl.enableVertexAttribArray(this.shaderProgram.attribLocations.vertexColor);
+        }
 
         gl.useProgram(this.shaderProgram.program);
 
@@ -113,7 +176,10 @@ class SceneObject {
             false,
             this.modelViewMatrix);
 
-        gl.drawArrays(gl.TRIANGLE_STRIP, offset, this.buffers.vertexCount);
+        if (this.buffers.indices)
+            gl.drawElements(this.buffers.type, this.buffers.vertexCount, this.buffers.indices.type, offset);
+        else
+            gl.drawArrays(this.buffers.type, offset, this.buffers.vertexCount);
     }
 }
 
@@ -165,23 +231,40 @@ function main() {
         },
     };
 
-    const buffers = initPlaneBuffers(gl);
+    const planeBuffers  = initPlaneBuffers(gl)
+    const cubeBuffers   = initCubeBuffers(gl)
 
-    var angle = 0;
-    const squareUpdate = function (sceneObj, dt) {
-        const angularSpeed = Math.PI
-        angle += angularSpeed * dt
-        id = mat4.create()
-        mat4.rotate(sceneObj.modelViewMatrix,
-                    id,
-                    angle,
-                    [0,0,1])
-    };
-    const square = new SceneObject(programInfo, buffers, squareUpdate)
+    const makeRotationUpdate = function(axis) {
+        const angularSpeed  = Math.PI * 0.25
+        var angle           = 0
+        return function(sceneObj, dt) {
+            deltaAngle  = angularSpeed * dt
+            var rot     = mat4.create()
+            mat4.rotate(sceneObj.modelViewMatrix,
+                        sceneObj.modelViewMatrix,
+                        deltaAngle,
+                        axis)
+        }
+    }
+        
+    const square = new SceneObject(programInfo, planeBuffers, makeRotationUpdate([0,0,1]))
     mat4.translate(square.modelViewMatrix,
                    square.modelViewMatrix,
                    [-0.0, 0.0, -6.0]);
 
+    const smallSquare = new SceneObject(programInfo, planeBuffers, makeRotationUpdate([0,0,-1]))
+    mat4.fromScaling(smallSquare.modelViewMatrix,
+                     [0.5, 0.5, 1])
+    mat4.translate(smallSquare.modelViewMatrix,
+                   smallSquare.modelViewMatrix,
+                   [-0.5, 0.5, -6.0]);
+
+    const cube = new SceneObject(programInfo, cubeBuffers, makeRotationUpdate(vec3.normalize(vec3.create(), [1,1,-1])))
+    mat4.fromScaling(cube.modelViewMatrix,
+                     [0.25, 0.25, 0.25])
+    mat4.translate(cube.modelViewMatrix,
+                   cube.modelViewMatrix,
+                   [-2.5, 2.0, -8.0]);
 
     const fieldOfView = 45 * Math.PI / 180;   // in radians
     const aspect = gl.canvas.clientWidth / gl.canvas.clientHeight;
@@ -194,8 +277,6 @@ function main() {
                      aspect,
                      zNear,
                      zFar);
-
-
     var then = 0;
     function render(now) {
         now *= 0.001;  // convert to seconds
@@ -204,8 +285,14 @@ function main() {
 
         {
             gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-            //square.update(deltaTime)
+            square.update(deltaTime)
             square.render(gl, projectionMatrix)
+
+            smallSquare.update(deltaTime)
+            smallSquare.render(gl, projectionMatrix)
+
+            cube.update(deltaTime)
+            cube.render(gl, projectionMatrix)
         }
 
         requestAnimationFrame(render);
