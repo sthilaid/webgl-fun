@@ -1,5 +1,4 @@
 // based on https://developer.mozilla.org/en-US/docs/Web/API/WebGL_API/Tutorial
-
 function initGL(gl) {
     gl.clearColor(0.0, 0.0, 0.0, 1.0);  // Clear to black, fully opaque
     gl.clearDepth(1.0);                 // Clear everything
@@ -119,6 +118,37 @@ function initCubeBuffers(gl) {
     };
 }
 
+function initMeshBuffers(gl, meshData) {
+    mesh = new OBJ.Mesh(meshData)
+    OBJ.initMeshBuffers(gl, mesh)
+
+    // mesh.normalBuffer
+    // mesh.textureBuffer
+    // mesh.vertexBuffer
+    // mesh.indexBuffer
+
+    const vertexCount = mesh.indexBuffer.numItems
+
+    // --- temp ---
+    var vertexColors = []
+    for (i=0; i<vertexCount; ++i) {
+        vertexColors = vertexColors.concat([Math.random(), Math.random(), Math.random(), 1.0])
+    }
+    // ---
+
+    const colorBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, colorBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertexColors), gl.STATIC_DRAW);
+
+    return {
+        type:           gl.TRIANGLES,
+        vertexCount:    vertexCount,
+        position:       {buffer: mesh.vertexBuffer, comp: 3, type: gl.FLOAT},
+        indices:        {buffer: mesh.indexBuffer,  comp: 3, type: gl.UNSIGNED_SHORT},
+        color:          {buffer: colorBuffer,       comp: 4, type: gl.FLOAT},
+    };
+}
+
 class SceneObject {
     constructor(programInfo, buffers, updateFn) {
         this.shaderProgram      = programInfo;
@@ -233,6 +263,7 @@ function main() {
 
     const planeBuffers  = initPlaneBuffers(gl)
     const cubeBuffers   = initCubeBuffers(gl)
+    const catBuffers    = initMeshBuffers(gl, catMeshData)
 
     const makeRotationUpdate = function(axis) {
         const angularSpeed  = Math.PI * 0.25
@@ -266,6 +297,16 @@ function main() {
                    cube.modelViewMatrix,
                    [-2.5, 2.0, -8.0]);
 
+    const cat = new SceneObject(programInfo, catBuffers, function(_, __){})
+    mat4.fromScaling(cat.modelViewMatrix,
+                     [0.01, 0.01, 0.01])
+    // mat4.translate(cat.modelViewMatrix,
+    //                cat.modelViewMatrix,
+    //                [2.5, -2.0, -8.0]);
+    mat4.translate(cat.modelViewMatrix,
+                   cat.modelViewMatrix,
+                   [0, 0, -1000.0]);
+
     const fieldOfView = 45 * Math.PI / 180;   // in radians
     const aspect = gl.canvas.clientWidth / gl.canvas.clientHeight;
     const zNear = 0.1;
@@ -293,6 +334,9 @@ function main() {
 
             cube.update(deltaTime)
             cube.render(gl, projectionMatrix)
+
+            cat.update(deltaTime)
+            cat.render(gl, projectionMatrix)
         }
 
         requestAnimationFrame(render);
@@ -300,4 +344,4 @@ function main() {
     requestAnimationFrame(render);
 }
 
-main();
+main()
