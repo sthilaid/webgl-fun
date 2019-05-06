@@ -1,9 +1,9 @@
 // based on https://developer.mozilla.org/en-US/docs/Web/API/WebGL_API/Tutorial
 function initGL(gl) {
     gl.clearColor(0.0, 0.0, 0.0, 1.0);  // Clear to black, fully opaque
-    gl.clearDepth(1.0);                 // Clear everything
+    // gl.clearDepth(-1.0);                 // Clear everything
     gl.enable(gl.DEPTH_TEST);           // Enable depth testing
-    gl.depthFunc(gl.LEQUAL);            // Near things obscure far things
+    // gl.depthFunc(gl.GEQUAL);            // Near things obscure far things
 }
 
 function initShaderProgram(gl, vsSource, fsSource) {
@@ -236,7 +236,9 @@ function main() {
 
     void main() {
         gl_Position = uProjectionMatrix * uModelViewMatrix * aVertexPosition;
-        vertexColor = aVertexColor;
+        //vertexColor = aVertexColor;
+        float col = mix(0.0, 1.0, gl_Position.z/10.0);
+        vertexColor = vec4(col, col, col, 1);
     }
   `;
 
@@ -288,29 +290,27 @@ function main() {
                      [0.5, 0.5, 1])
     mat4.translate(smallSquare.modelViewMatrix,
                    smallSquare.modelViewMatrix,
-                   [-0.5, 0.5, -6.0]);
+                   [-0.5, 0.5, -5.0]);
 
     const cube = new SceneObject(programInfo, cubeBuffers, makeRotationUpdate(vec3.normalize(vec3.create(), [1,1,-1])))
     mat4.fromScaling(cube.modelViewMatrix,
                      [0.25, 0.25, 0.25])
     mat4.translate(cube.modelViewMatrix,
                    cube.modelViewMatrix,
-                   [-2.5, 2.0, -8.0]);
+                   [-.5, .0, -15.0]);
 
-    const cat = new SceneObject(programInfo, catBuffers, function(_, __){})
+    const cat = new SceneObject(programInfo, catBuffers, makeRotationUpdate(vec3.normalize(vec3.create(), [0,1,0])))
     mat4.fromScaling(cat.modelViewMatrix,
-                     [0.01, 0.01, 0.01])
-    // mat4.translate(cat.modelViewMatrix,
-    //                cat.modelViewMatrix,
-    //                [2.5, -2.0, -8.0]);
+                     [0.001, 0.001, 0.001])
     mat4.translate(cat.modelViewMatrix,
                    cat.modelViewMatrix,
-                   [0, 0, -1000.0]);
+                   [500, -500, -2000.0]);
+
 
     const fieldOfView = 45 * Math.PI / 180;   // in radians
     const aspect = gl.canvas.clientWidth / gl.canvas.clientHeight;
     const zNear = 0.1;
-    const zFar = 100.0;
+    const zFar = 100000.0;
     const projectionMatrix = mat4.create();
 
     mat4.perspective(projectionMatrix,
@@ -318,6 +318,8 @@ function main() {
                      aspect,
                      zNear,
                      zFar);
+    // mat4.ortho(projectionMatrix,
+    //           -10, 10, -10, 10, 0.001, 10000)
     var then = 0;
     function render(now) {
         now *= 0.001;  // convert to seconds
@@ -326,6 +328,7 @@ function main() {
 
         {
             gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+
             square.update(deltaTime)
             square.render(gl, projectionMatrix)
 
