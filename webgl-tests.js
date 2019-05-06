@@ -1,8 +1,17 @@
+var debugProjMat;
+var testVec = vec4.fromValues(0.0, 0.0, -0.1, 1.0)
+var testVec2 = vec4.create()
+var testVec3 = vec4.create()
+var test = function() {
+    vec4.transformMat4(testVec2, testVec, debugProjMat)
+    vec4.normalize(testVec3, testVec2)
+}
+
 // based on https://developer.mozilla.org/en-US/docs/Web/API/WebGL_API/Tutorial
 function initGL(gl) {
     gl.clearColor(0.0, 0.0, 0.0, 1.0);  // Clear to black, fully opaque
-    // gl.clearDepth(-1.0);                 // Clear everything
     gl.enable(gl.DEPTH_TEST);           // Enable depth testing
+    // gl.clearDepth(0.0);                 // Clear everything
     // gl.depthFunc(gl.GEQUAL);            // Near things obscure far things
 }
 
@@ -235,9 +244,11 @@ function main() {
     uniform mat4 uProjectionMatrix;
 
     void main() {
-        gl_Position = uProjectionMatrix * uModelViewMatrix * aVertexPosition;
+        vec4 pos = uProjectionMatrix * uModelViewMatrix * aVertexPosition;
+        gl_Position = normalize(pos);
         //vertexColor = aVertexColor;
-        float col = mix(0.0, 1.0, gl_Position.z/10.0);
+        float scaledZ = gl_Position.z * 0.5 + 0.5;
+        float col = clamp(mix(0.0, 1.0, scaledZ), 0.0, 1.0);
         vertexColor = vec4(col, col, col, 1);
     }
   `;
@@ -290,14 +301,14 @@ function main() {
                      [0.5, 0.5, 1])
     mat4.translate(smallSquare.modelViewMatrix,
                    smallSquare.modelViewMatrix,
-                   [-0.5, 0.5, -5.0]);
+                   [-1.5, 1.5, -5.0]);
 
     const cube = new SceneObject(programInfo, cubeBuffers, makeRotationUpdate(vec3.normalize(vec3.create(), [1,1,-1])))
     mat4.fromScaling(cube.modelViewMatrix,
                      [0.25, 0.25, 0.25])
     mat4.translate(cube.modelViewMatrix,
                    cube.modelViewMatrix,
-                   [-.5, .0, -15.0]);
+                   [-3.5, 3.0, -15.0]);
 
     const cat = new SceneObject(programInfo, catBuffers, makeRotationUpdate(vec3.normalize(vec3.create(), [0,1,0])))
     mat4.fromScaling(cat.modelViewMatrix,
@@ -318,8 +329,12 @@ function main() {
                      aspect,
                      zNear,
                      zFar);
+    
     // mat4.ortho(projectionMatrix,
     //           -10, 10, -10, 10, 0.001, 10000)
+
+    debugProjMat = projectionMatrix
+    
     var then = 0;
     function render(now) {
         now *= 0.001;  // convert to seconds
