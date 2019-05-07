@@ -1,18 +1,11 @@
-var debugProjMat;
-var testVec = vec4.fromValues(0.0, 0.0, -0.1, 1.0)
-var testVec2 = vec4.create()
-var testVec3 = vec4.create()
-var test = function() {
-    vec4.transformMat4(testVec2, testVec, debugProjMat)
-    vec4.normalize(testVec3, testVec2)
-}
-
 // based on https://developer.mozilla.org/en-US/docs/Web/API/WebGL_API/Tutorial
 function initGL(gl) {
     gl.clearColor(0.0, 0.0, 0.0, 1.0);  // Clear to black, fully opaque
     gl.enable(gl.DEPTH_TEST);           // Enable depth testing
     // gl.clearDepth(0.0);                 // Clear everything
     // gl.depthFunc(gl.GEQUAL);            // Near things obscure far things
+    gl.clearDepth(1.0);                 // Clear everything
+    gl.depthFunc(gl.LESS);            // Near things obscure far things
 }
 
 function initShaderProgram(gl, vsSource, fsSource) {
@@ -237,7 +230,7 @@ function main() {
     attribute vec4 aVertexPosition;
     attribute vec4 aVertexColor;
 
-    //out vec4 outColor;
+    //out vec4 vertexColor;
     varying lowp vec4 vertexColor;
 
     uniform mat4 uModelViewMatrix;
@@ -246,10 +239,10 @@ function main() {
     void main() {
         vec4 pos = uProjectionMatrix * uModelViewMatrix * aVertexPosition;
         gl_Position = normalize(pos);
-        //vertexColor = aVertexColor;
-        float scaledZ = gl_Position.z * 0.5 + 0.5;
-        float col = clamp(mix(0.0, 1.0, scaledZ), 0.0, 1.0);
-        vertexColor = vec4(col, col, col, 1);
+        vertexColor = aVertexColor;
+        // float scaledZ = gl_Position.z * 0.5 + 0.5;
+        // float col = clamp(mix(0.0, 1.0, scaledZ), 0.0, 1.0);
+        // vertexColor = vec4(col, col, col, 1);
     }
   `;
 
@@ -320,20 +313,32 @@ function main() {
 
     const fieldOfView = 45 * Math.PI / 180;   // in radians
     const aspect = gl.canvas.clientWidth / gl.canvas.clientHeight;
-    const zNear = 0.1;
-    const zFar = 100000.0;
+    const zNear = -0.01;
+    const zFar = -10.0;
     const projectionMatrix = mat4.create();
 
-    mat4.perspective(projectionMatrix,
-                     fieldOfView,
-                     aspect,
-                     zNear,
-                     zFar);
+    // mat4.perspective2(projectionMatrix,
+    //                  fieldOfView,
+    //                  aspect,
+    //                  zNear,
+    //                  zFar);
     
     // mat4.ortho(projectionMatrix,
     //           -10, 10, -10, 10, 0.001, 10000)
 
-    debugProjMat = projectionMatrix
+    mat4.frustum3(projectionMatrix,
+                  1, 1, -0.01, -10)
+
+    console.log(projectionMatrix)
+    var v1 = vec4.create()
+    var v2 = vec4.create()
+    var values = [-10, -5, -1, 1, 5, 10]
+    values.forEach(function(n) {
+        v1 = vec4.fromValues(0, 0, n, 1)
+        vec4.transformMat4(v2, v1, projectionMatrix)
+        vec4.normalize(v2, v2)
+        console.log("v1: "+v1+" v2: "+v2)
+    })
     
     var then = 0;
     function render(now) {

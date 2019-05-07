@@ -3731,6 +3731,7 @@ exports.fromRotationTranslationScaleOrigin = fromRotationTranslationScaleOrigin;
 exports.fromQuat = fromQuat;
 exports.frustum = frustum;
 exports.frustum2 = frustum2;
+exports.frustum3 = frustum3;
 exports.perspective = perspective;
 exports.perspective2 = perspective2;
 exports.perspectiveFromFieldOfView = perspectiveFromFieldOfView;
@@ -5100,26 +5101,47 @@ function frustum(out, left, right, bottom, top, near, far) {
 }
 
 function frustum2(out, left, right, bottom, top, near, far) {
-  var rl = 1 / (right - left);
-  var tb = 1 / (top - bottom);
-  var nf = 1 / (near - far);
-  out[0] = near * 2 * rl;
-  out[1] = 0;
-  out[2] = 0;
-  out[3] = 0;
-  out[4] = 0;
-  out[5] = near * 2 * tb;
-  out[6] = 0;
-  out[7] = 0;
-  out[8] = 0;
-  out[9] = 0;
-  out[10] = -(far+near) / (far-near);
-  out[11] = -1;
-  out[12] = -near * (right + left) * rl
-  out[13] = -near * (top + bottom) * tb;
-  out[14] = far * near * 2 * nf;
-  out[15] = 0;
-  return out;
+  var rl = 1 / (right - left)
+  var tb = 1 / (top - bottom)
+  var fn = 1 / (far - near)
+  out[0] = near * 2 * rl
+  out[1] = 0
+  out[2] = 0
+  out[3] = 0
+  out[4] = 0
+  out[5] = near * 2 * tb
+  out[6] = 0
+  out[7] = 0
+  out[8] = (right + left) * rl
+  out[9] = (top + bottom) * tb
+  out[10] = -(far + near) * fn
+  out[11] = -1
+  out[12] = 0
+  out[13] = 0
+  out[14] = - far * near * 2 * fn
+  out[15] = 0
+  return out
+}
+
+function frustum3(out, right, top, near, far) {
+    var fn = 1 / (far - near)
+    out[0] = near / right
+    out[1] = 0
+    out[2] = 0
+    out[3] = 0
+    out[4] = 0
+    out[5] = near / top
+    out[6] = 0
+    out[7] = 0
+    out[8] = 0
+    out[9] = 0
+    out[10] = -(far + near) * fn
+    out[11] = -1
+    out[12] = 0
+    out[13] = 0
+    out[14] = -2 * far * near * fn
+    out[15] = 0
+    return out
 }
 
 // fovy is in rad
