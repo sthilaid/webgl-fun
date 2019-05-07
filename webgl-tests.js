@@ -1,11 +1,10 @@
-// based on https://developer.mozilla.org/en-US/docs/Web/API/WebGL_API/Tutorial
+// code based on https://developer.mozilla.org/en-US/docs/Web/API/WebGL_API/Tutorial
+
 function initGL(gl) {
     gl.clearColor(0.0, 0.0, 0.0, 1.0);  // Clear to black, fully opaque
     gl.enable(gl.DEPTH_TEST);           // Enable depth testing
-    // gl.clearDepth(0.0);                 // Clear everything
-    // gl.depthFunc(gl.GEQUAL);            // Near things obscure far things
-    gl.clearDepth(1.0);                 // Clear everything
-    gl.depthFunc(gl.LESS);            // Near things obscure far things
+    gl.clearDepth(1.0);
+    gl.depthFunc(gl.LESS);              // smaller z is closer
 }
 
 function initShaderProgram(gl, vsSource, fsSource) {
@@ -237,11 +236,11 @@ function main() {
     uniform mat4 uProjectionMatrix;
 
     void main() {
-        vec4 pos = uProjectionMatrix * uModelViewMatrix * aVertexPosition;
+        vec4 pos = uProjectionMatrix * (uModelViewMatrix * aVertexPosition);
         gl_Position = normalize(pos);
         vertexColor = aVertexColor;
-        // float scaledZ = gl_Position.z * 0.5 + 0.5;
-        // float col = clamp(mix(0.0, 1.0, scaledZ), 0.0, 1.0);
+        // float z = gl_Position.z * 0.5 + 0.5; // [-1,1] -> [0,1]
+        // float col = mix(1.0, 0.0, z); // smaller z is closer (more white)
         // vertexColor = vec4(col, col, col, 1);
     }
   `;
@@ -285,59 +284,39 @@ function main() {
     }
         
     const square = new SceneObject(programInfo, planeBuffers, makeRotationUpdate([0,0,1]))
-    mat4.translate(square.modelViewMatrix,
-                   square.modelViewMatrix,
-                   [-0.0, 0.0, -6.0]);
+    mat4.fromRotationTranslationScale(square.modelViewMatrix, quat.create(),
+                                      [-0.0, 0.0, -6.0], [1,1,1])
 
     const smallSquare = new SceneObject(programInfo, planeBuffers, makeRotationUpdate([0,0,-1]))
-    mat4.fromScaling(smallSquare.modelViewMatrix,
-                     [0.5, 0.5, 1])
-    mat4.translate(smallSquare.modelViewMatrix,
-                   smallSquare.modelViewMatrix,
-                   [-1.5, 1.5, -5.0]);
+    mat4.fromRotationTranslationScale(smallSquare.modelViewMatrix, quat.create(),
+                                      [0.0, 0.0, -3.0], [0.25, 0.25, 1])
 
     const cube = new SceneObject(programInfo, cubeBuffers, makeRotationUpdate(vec3.normalize(vec3.create(), [1,1,-1])))
-    mat4.fromScaling(cube.modelViewMatrix,
-                     [0.25, 0.25, 0.25])
-    mat4.translate(cube.modelViewMatrix,
-                   cube.modelViewMatrix,
-                   [-3.5, 3.0, -15.0]);
+    mat4.fromRotationTranslationScale(cube.modelViewMatrix, quat.create(),
+                                      [-2.0, -1.0, -10.0], [1, 1, 1])
 
     const cat = new SceneObject(programInfo, catBuffers, makeRotationUpdate(vec3.normalize(vec3.create(), [0,1,0])))
-    mat4.fromScaling(cat.modelViewMatrix,
-                     [0.001, 0.001, 0.001])
-    mat4.translate(cat.modelViewMatrix,
-                   cat.modelViewMatrix,
-                   [500, -500, -2000.0]);
-
+    mat4.fromRotationTranslationScale(cat.modelViewMatrix, quat.create(),
+                                      [4, -4, -10.0], [0.01, 0.01, 0.01])
 
     const fieldOfView = 45 * Math.PI / 180;   // in radians
     const aspect = gl.canvas.clientWidth / gl.canvas.clientHeight;
-    const zNear = -0.01;
-    const zFar = -10.0;
+    const zNear = 1.0;
+    const zFar = 10000.0;
     const projectionMatrix = mat4.create();
 
-    // mat4.perspective2(projectionMatrix,
-    //                  fieldOfView,
-    //                  aspect,
-    //                  zNear,
-    //                  zFar);
-    
-    // mat4.ortho(projectionMatrix,
-    //           -10, 10, -10, 10, 0.001, 10000)
+    mat4.perspective(projectionMatrix,
+                      fieldOfView,
+                      aspect,
+                      zNear,
+                      zFar);
 
-    mat4.frustum3(projectionMatrix,
-                  1, 1, -0.01, -10)
-
-    console.log(projectionMatrix)
-    var v1 = vec4.create()
-    var v2 = vec4.create()
-    var values = [-10, -5, -1, 1, 5, 10]
-    values.forEach(function(n) {
-        v1 = vec4.fromValues(0, 0, n, 1)
-        vec4.transformMat4(v2, v1, projectionMatrix)
-        vec4.normalize(v2, v2)
-        console.log("v1: "+v1+" v2: "+v2)
+    var values = [-1, -2, -5, -10, -100, -1000]
+    values.forEach(function(val) {
+        const v = vec4.fromValues(0,0,val,1)
+        var res = vec4.transformMat4(vec4.create(), v, projectionMatrix)
+        res = vec4.normalize(res, res)
+        console.log(v + " => " + res[2])
     })
     
     var then = 0;
