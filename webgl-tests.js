@@ -1,10 +1,14 @@
 // code based on https://developer.mozilla.org/en-US/docs/Web/API/WebGL_API/Tutorial
 
 function initGL(gl) {
-    gl.clearColor(0.0, 0.0, 0.0, 1.0);  // Clear to black, fully opaque
-    gl.enable(gl.DEPTH_TEST);           // Enable depth testing
-    gl.clearDepth(1.0);
-    gl.depthFunc(gl.LESS);              // smaller z is closer
+    gl.clearColor(0.0, 0.0, 0.0, 1.0)   // Clear to black, fully opaque
+
+    gl.enable(gl.DEPTH_TEST)            // Enable depth testing
+    gl.clearDepth(1.0)
+    gl.depthFunc(gl.LESS)               // smaller z is closer
+
+    gl.enable(gl.BLEND)
+    gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA)
 }
 
 function initShaderProgram(gl, vsSource, fsSource) {
@@ -39,6 +43,56 @@ function initShaderProgram(gl, vsSource, fsSource) {
     return shaderProgram;
 }
 
+function loadTexture(gl, url) {
+  const texture = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, texture);
+
+  // Because images have to be download over the internet
+  // they might take a moment until they are ready.
+  // Until then put a single pixel in the texture so we can
+  // use it immediately. When the image has finished downloading
+  // we'll update the texture with the contents of the image.
+  const level = 0;
+  const internalFormat = gl.RGBA;
+  const width = 1;
+  const height = 1;
+  const border = 0;
+  const srcFormat = gl.RGBA;
+  const srcType = gl.UNSIGNED_BYTE;
+  const pixel = new Uint8Array([0, 0, 255, 255]);  // opaque blue
+  gl.texImage2D(gl.TEXTURE_2D, level, internalFormat,
+                width, height, border, srcFormat, srcType,
+                pixel);
+
+  const image = new Image();
+  image.crossOrigin = "Anonymous"
+  image.onload = function() {
+    gl.bindTexture(gl.TEXTURE_2D, texture);
+    gl.texImage2D(gl.TEXTURE_2D, level, internalFormat,
+                  srcFormat, srcType, image);
+
+    // WebGL1 has different requirements for power of 2 images
+    // vs non power of 2 images so check if the image is a
+    // power of 2 in both dimensions.
+    if (isPowerOf2(image.width) && isPowerOf2(image.height)) {
+       // Yes, it's a power of 2. Generate mips.
+       gl.generateMipmap(gl.TEXTURE_2D);
+    } else {
+       // No, it's not a power of 2. Turn off mips and set
+       // wrapping to clamp to edge
+       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+       gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.LINEAR);
+    }
+  };
+  image.src = url;
+
+  return texture;
+}
+
+function isPowerOf2(value) {
+  return (value & (value - 1)) == 0;
+}
 
 function initPlaneBuffers(gl) {
     const positions = [
@@ -50,6 +104,16 @@ function initPlaneBuffers(gl) {
     const positionBuffer = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(positions), gl.STATIC_DRAW);
+
+    const uvs = [
+        1.0, 1.0,
+        0.0, 1.0,
+        1.0, 0.0,
+        0.0, 0.0,
+    ];
+    const uvBuffer = gl.createBuffer()
+    gl.bindBuffer(gl.ARRAY_BUFFER, uvBuffer)
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(uvs), gl.STATIC_DRAW)
 
     const colors = [
         0.0, 0.0, 1.0, 1.0,
@@ -65,6 +129,7 @@ function initPlaneBuffers(gl) {
         type:           gl.TRIANGLE_STRIP,
         vertexCount:    4,
         position:       {buffer: positionBuffer,    comp: 2, type: gl.FLOAT},
+        uvs:            {buffer: uvBuffer,          comp: 2, type: gl.FLOAT},
         indices:        false,
         color:          {buffer: colorBuffer,       comp: 4, type: gl.FLOAT},
     };
@@ -114,6 +179,7 @@ function initCubeBuffers(gl) {
         type:           gl.TRIANGLES,
         vertexCount:    indices.length,
         position:       {buffer: positionBuffer,    comp: 3, type: gl.FLOAT},
+        uvs:            false,
         indices:        {buffer: indicesBuffer,     comp: 3, type: gl.UNSIGNED_SHORT},
         color:          {buffer: colorBuffer,       comp: 4, type: gl.FLOAT},
     };
@@ -145,6 +211,8 @@ function initMeshBuffers(gl, meshData) {
         type:           gl.TRIANGLES,
         vertexCount:    vertexCount,
         position:       {buffer: mesh.vertexBuffer, comp: 3, type: gl.FLOAT},
+        normals:        {buffer: mesh.normalBuffer, comp: 3, type: gl.FLOAT},
+        uvs:            false,
         indices:        {buffer: mesh.indexBuffer,  comp: 3, type: gl.UNSIGNED_SHORT},
         color:          {buffer: colorBuffer,       comp: 4, type: gl.FLOAT},
     };
@@ -154,6 +222,7 @@ class SceneObject {
     constructor(programInfo, buffers, updateFn) {
         this.shaderProgram      = programInfo;
         this.buffers            = buffers;
+        this.texture            = false
         this.updateFn           = updateFn;
         this.modelViewMatrix    = mat4.create();
     }
@@ -168,7 +237,7 @@ class SceneObject {
         const offset = 0;
 
         // Vertex buffer
-        if (this.buffers.position)
+        if (this.buffers.position && this.shaderProgram.attribLocations.vertexPosition !== false)
         {
             gl.bindBuffer(gl.ARRAY_BUFFER, this.buffers.position.buffer);
             gl.vertexAttribPointer(this.shaderProgram.attribLocations.vertexPosition,
@@ -184,8 +253,18 @@ class SceneObject {
             gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.buffers.indices.buffer);
         }
 
+        if (this.buffers.uvs && this.shaderProgram.attribLocations.texCoord !== false)
+        {
+            gl.bindBuffer(gl.ARRAY_BUFFER, this.buffers.uvs.buffer);
+            gl.vertexAttribPointer(this.shaderProgram.attribLocations.texCoord,
+                                   this.buffers.uvs.comp,
+                                   this.buffers.uvs.type,
+                                   normalize, stride, offset)
+            gl.enableVertexAttribArray(this.shaderProgram.attribLocations.texCoord);
+        }
+
         // Color buffer
-        if (this.buffers.color)
+        if (this.buffers.color && this.shaderProgram.attribLocations.vertexColor !== false)
         {
             gl.bindBuffer(gl.ARRAY_BUFFER, this.buffers.color.buffer);
             gl.vertexAttribPointer(this.shaderProgram.attribLocations.vertexColor,
@@ -207,6 +286,12 @@ class SceneObject {
             false,
             this.modelViewMatrix);
 
+        if (this.texture !== false && this.shaderProgram.uniformLocations.texture !== false) {
+            gl.activeTexture(gl.TEXTURE0)
+            gl.bindTexture(gl.TEXTURE_2D, this.texture)
+            gl.uniform1i(this.shaderProgram.uniformLocations.texture, 0)
+        }
+
         if (this.buffers.indices)
             gl.drawElements(this.buffers.type, this.buffers.vertexCount, this.buffers.indices.type, offset);
         else
@@ -214,18 +299,8 @@ class SceneObject {
     }
 }
 
-function main() {
-    const canvas = document.querySelector('#glcanvas');
-    const gl = canvas.getContext('webgl');
-
-    if (!gl) {
-        alert('Unable to initialize WebGL. Your browser or machine may not support it.');
-        return;
-    }
-
-    initGL(gl);
-
-    const vsSource = `
+function makeSimpleShader(gl) {
+        const vsSource = `
     attribute vec4 aVertexPosition;
     attribute vec4 aVertexColor;
 
@@ -259,19 +334,84 @@ function main() {
         attribLocations: {
             vertexPosition: gl.getAttribLocation(shaderProgram, 'aVertexPosition'),
             vertexColor:    gl.getAttribLocation(shaderProgram, 'aVertexColor'),
+            texCoord:       false,
         },
         uniformLocations: {
-            projectionMatrix: gl.getUniformLocation(shaderProgram, 'uProjectionMatrix'),
-            modelViewMatrix: gl.getUniformLocation(shaderProgram, 'uModelViewMatrix'),
+            projectionMatrix:   gl.getUniformLocation(shaderProgram, 'uProjectionMatrix'),
+            modelViewMatrix:    gl.getUniformLocation(shaderProgram, 'uModelViewMatrix'),
+            texture:            false,
         },
     };
+    return programInfo
+}
+
+function makeTexturedShader(gl) {
+        const vsSource = `
+    attribute vec4 aVertexPosition;
+    attribute vec2 aTexCoord;
+
+    varying lowp vec2 vTexCoord;
+
+    uniform mat4 uModelViewMatrix;
+    uniform mat4 uProjectionMatrix;
+
+    void main() {
+        vec4 pos = uProjectionMatrix * uModelViewMatrix * aVertexPosition;
+        gl_Position = normalize(pos);
+        vTexCoord = aTexCoord;
+    }
+  `;
+
+    const fsSource = `
+    varying lowp vec2 vTexCoord;
+    uniform sampler2D uTexture;
+
+    void main() {
+        const lowp float threshold = 0.6;
+        gl_FragColor = texture2D(uTexture, vTexCoord);
+        if (gl_FragColor[0] < threshold && gl_FragColor[1] < threshold && gl_FragColor[2] < threshold) {
+            lowp float minColor  = min(min(gl_FragColor[0], gl_FragColor[1]), gl_FragColor[2]);
+            gl_FragColor[3] = mix(0.0, 1.0, minColor);
+        }
+    }
+  `;
+
+    const shaderProgram = initShaderProgram(gl, vsSource, fsSource);
+    const programInfo = {
+        program: shaderProgram,
+        attribLocations: {
+            vertexPosition: gl.getAttribLocation(shaderProgram, 'aVertexPosition'),
+            vertexColor:    false,
+            texCoord:       gl.getAttribLocation(shaderProgram, 'aTexCoord'),
+        },
+        uniformLocations: {
+            projectionMatrix:   gl.getUniformLocation(shaderProgram, 'uProjectionMatrix'),
+            modelViewMatrix:    gl.getUniformLocation(shaderProgram, 'uModelViewMatrix'),
+            texture:            gl.getUniformLocation(shaderProgram, 'uTexture'),
+        },
+    };
+    return programInfo
+}
+
+function main() {
+    const canvas = document.querySelector('#glcanvas');
+    const gl = canvas.getContext('webgl');
+
+    if (!gl) {
+        alert('Unable to initialize WebGL. Your browser or machine may not support it.');
+        return;
+    }
+
+    initGL(gl);
+
+    const simpleShader  = makeSimpleShader(gl)
+    const textureShader = makeTexturedShader(gl)
 
     const planeBuffers  = initPlaneBuffers(gl)
     const cubeBuffers   = initCubeBuffers(gl)
     const catBuffers    = initMeshBuffers(gl, catMeshData)
 
-    const makeRotationUpdate = function(axis) {
-        const angularSpeed  = Math.PI * 0.25
+    const makeRotationUpdate = function(axis, angularSpeed = Math.PI * 0.25) {
         var angle           = 0
         return function(sceneObj, dt) {
             deltaAngle  = angularSpeed * dt
@@ -283,19 +423,22 @@ function main() {
         }
     }
         
-    const square = new SceneObject(programInfo, planeBuffers, makeRotationUpdate([0,0,1]))
+    const square = new SceneObject(textureShader, planeBuffers, makeRotationUpdate([0,0,1], Math.PI * 0.05))
+    square.texture = loadTexture(gl, "sun.jpg")
     mat4.fromRotationTranslationScale(square.modelViewMatrix, quat.create(),
                                       [-0.0, 0.0, -6.0], [1,1,1])
 
-    const smallSquare = new SceneObject(programInfo, planeBuffers, makeRotationUpdate([0,0,-1]))
+    const smallSquare = new SceneObject(simpleShader, planeBuffers, makeRotationUpdate([0,0,-1], Math.PI * 0.1))
     mat4.fromRotationTranslationScale(smallSquare.modelViewMatrix, quat.create(),
-                                      [0.0, 0.0, -3.0], [0.25, 0.25, 1])
+                                      [0.5, -0.3, -3.0], [0.25, 0.25, 1])
 
-    const cube = new SceneObject(programInfo, cubeBuffers, makeRotationUpdate(vec3.normalize(vec3.create(), [1,1,-1])))
+    const cube = new SceneObject(simpleShader, cubeBuffers, makeRotationUpdate(vec3.normalize(vec3.create(), [1,1,-1]),
+                                                                               Math.PI * 0.15))
     mat4.fromRotationTranslationScale(cube.modelViewMatrix, quat.create(),
                                       [-2.0, -1.0, -10.0], [1, 1, 1])
 
-    const cat = new SceneObject(programInfo, catBuffers, makeRotationUpdate(vec3.normalize(vec3.create(), [0,1,0])))
+    const cat = new SceneObject(simpleShader, catBuffers, makeRotationUpdate(vec3.normalize(vec3.create(), [0,1,0]),
+                                                                             Math.PI * 0.1))
     mat4.fromRotationTranslationScale(cat.modelViewMatrix, quat.create(),
                                       [4, -4, -10.0], [0.01, 0.01, 0.01])
 
@@ -310,14 +453,6 @@ function main() {
                       aspect,
                       zNear,
                       zFar);
-
-    var values = [-1, -2, -5, -10, -100, -1000]
-    values.forEach(function(val) {
-        const v = vec4.fromValues(0,0,val,1)
-        var res = vec4.transformMat4(vec4.create(), v, projectionMatrix)
-        res = vec4.normalize(res, res)
-        console.log(v + " => " + res[2])
-    })
     
     var then = 0;
     function render(now) {
@@ -328,9 +463,6 @@ function main() {
         {
             gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
 
-            square.update(deltaTime)
-            square.render(gl, projectionMatrix)
-
             smallSquare.update(deltaTime)
             smallSquare.render(gl, projectionMatrix)
 
@@ -339,6 +471,9 @@ function main() {
 
             cat.update(deltaTime)
             cat.render(gl, projectionMatrix)
+
+            square.update(deltaTime)
+            square.render(gl, projectionMatrix)
         }
 
         requestAnimationFrame(render);
