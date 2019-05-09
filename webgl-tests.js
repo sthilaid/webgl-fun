@@ -218,8 +218,61 @@ function initMeshBuffers(gl, meshData) {
     };
 }
 
+class Scene {
+    constructor(camera, objects) {
+        this.camera     = camera
+        this.objects    = objects
+
+        if (!(camera instanceof Camera)) {
+            console.error("no Camera instance defined in scene")
+        }
+
+        if (!(objects instanceof Array)) {
+            console.error("no objects defined in scene")
+        } 
+    }
+
+    update(dt) {
+        if (this.objects !== false) {
+            this.objects.forEach(obj => obj.update(dt))
+        } else {
+            console.warn("No scene objects registered...")
+        }
+        if (this.camera !== false) {
+            this.camera.update(dt)
+        } else {
+            console.warn("No scene camera registered...")
+        }
+    }
+
+    render(gl) {
+        if (this.objects !== false) {
+            this.objects.forEach(obj => obj.render(gl, this.camera.invMatrix, this.camera.projMatrix))
+        } else {
+            console.warn("No scene objects registered...")
+        }
+    }
+}
+
+class Camera {
+    constructor(initMatrix, projMatrix, updateFn) {
+        this.matrix     = initMatrix
+        this.projMatrix = projMatrix
+        this.updateFn   = updateFn
+        this.invMatrix  = mat4.create()
+        mat4.invert(this.invMatrix, this.matrix)
+    }
+
+    update(dt) {
+        if (this.updateFn !== false)
+            this.updateFn(this.matrix, dt)
+
+        mat4.invert(this.invMatrix, this.matrix)
+    }
+}
+
 class SceneObject {
-    constructor(programInfo, buffers, updateFn) {
+    constructor(id, programInfo, buffers, updateFn) {
         this.shaderProgram      = programInfo;
         this.buffers            = buffers;
         this.texture            = false
@@ -231,7 +284,7 @@ class SceneObject {
         this.updateFn(this, dt)
     }
 
-    render(gl, projectionMatrix) {
+    render(gl, cameraInvMatrix, projectionMatrix) {
         const normalize = false;
         const stride = 0;
         const offset = 0;
@@ -282,6 +335,11 @@ class SceneObject {
             projectionMatrix);
 
         gl.uniformMatrix4fv(
+            this.shaderProgram.uniformLocations.cameraInvMatrix,
+            false,
+            cameraInvMatrix);
+
+        gl.uniformMatrix4fv(
             this.shaderProgram.uniformLocations.modelViewMatrix,
             false,
             this.modelViewMatrix);
@@ -308,10 +366,11 @@ function makeSimpleShader(gl) {
     varying lowp vec4 vertexColor;
 
     uniform mat4 uModelViewMatrix;
+    uniform mat4 uCameraInvMatrix;
     uniform mat4 uProjectionMatrix;
 
     void main() {
-        vec4 pos = uProjectionMatrix * (uModelViewMatrix * aVertexPosition);
+        vec4 pos = uProjectionMatrix * uCameraInvMatrix * uModelViewMatrix * aVertexPosition;
         gl_Position = normalize(pos);
         vertexColor = aVertexColor;
         // float z = gl_Position.z * 0.5 + 0.5; // [-1,1] -> [0,1]
@@ -338,6 +397,7 @@ function makeSimpleShader(gl) {
         },
         uniformLocations: {
             projectionMatrix:   gl.getUniformLocation(shaderProgram, 'uProjectionMatrix'),
+            cameraInvMatrix:    gl.getUniformLocation(shaderProgram, 'uCameraInvMatrix'),
             modelViewMatrix:    gl.getUniformLocation(shaderProgram, 'uModelViewMatrix'),
             texture:            false,
         },
@@ -353,10 +413,11 @@ function makeTexturedShader(gl) {
     varying lowp vec2 vTexCoord;
 
     uniform mat4 uModelViewMatrix;
+    uniform mat4 uCameraInvMatrix;
     uniform mat4 uProjectionMatrix;
 
     void main() {
-        vec4 pos = uProjectionMatrix * uModelViewMatrix * aVertexPosition;
+        vec4 pos = uProjectionMatrix * uCameraInvMatrix * uModelViewMatrix * aVertexPosition;
         gl_Position = normalize(pos);
         vTexCoord = aTexCoord;
     }
@@ -386,6 +447,7 @@ function makeTexturedShader(gl) {
         },
         uniformLocations: {
             projectionMatrix:   gl.getUniformLocation(shaderProgram, 'uProjectionMatrix'),
+            cameraInvMatrix:    gl.getUniformLocation(shaderProgram, 'uCameraInvMatrix'),
             modelViewMatrix:    gl.getUniformLocation(shaderProgram, 'uModelViewMatrix'),
             texture:            gl.getUniformLocation(shaderProgram, 'uTexture'),
         },
@@ -423,21 +485,21 @@ function main() {
         }
     }
         
-    const square = new SceneObject(textureShader, planeBuffers, makeRotationUpdate([0,0,1], Math.PI * 0.05))
-    square.texture = loadTexture(gl, "sun.jpg")
-    mat4.fromRotationTranslationScale(square.modelViewMatrix, quat.create(),
+    const sunSquare = new SceneObject("sunSquare", textureShader, planeBuffers, makeRotationUpdate([0,0,1], Math.PI * 0.05))
+    sunSquare.texture = loadTexture(gl, "sun.jpg")
+    mat4.fromRotationTranslationScale(sunSquare.modelViewMatrix, quat.create(),
                                       [-0.0, 0.0, -6.0], [1,1,1])
 
-    const smallSquare = new SceneObject(simpleShader, planeBuffers, makeRotationUpdate([0,0,-1], Math.PI * 0.1))
+    const smallSquare = new SceneObject("smallSquare", simpleShader, planeBuffers, makeRotationUpdate([0,0,-1], Math.PI * 0.1))
     mat4.fromRotationTranslationScale(smallSquare.modelViewMatrix, quat.create(),
                                       [0.5, -0.3, -3.0], [0.25, 0.25, 1])
 
-    const cube = new SceneObject(simpleShader, cubeBuffers, makeRotationUpdate(vec3.normalize(vec3.create(), [1,1,-1]),
+    const cube = new SceneObject("cube", simpleShader, cubeBuffers, makeRotationUpdate(vec3.normalize(vec3.create(), [1,1,-1]),
                                                                                Math.PI * 0.15))
     mat4.fromRotationTranslationScale(cube.modelViewMatrix, quat.create(),
                                       [-2.0, -1.0, -10.0], [1, 1, 1])
 
-    const cat = new SceneObject(simpleShader, catBuffers, makeRotationUpdate(vec3.normalize(vec3.create(), [0,1,0]),
+    const cat = new SceneObject("cat", simpleShader, catBuffers, makeRotationUpdate(vec3.normalize(vec3.create(), [0,1,0]),
                                                                              Math.PI * 0.1))
     mat4.fromRotationTranslationScale(cat.modelViewMatrix, quat.create(),
                                       [4, -4, -10.0], [0.01, 0.01, 0.01])
@@ -453,6 +515,21 @@ function main() {
                       aspect,
                       zNear,
                       zFar);
+
+    const cameraUpdate = function() {
+        const lookAtTarget = vec3.fromValues(0,0,-5)
+        const latDisplacement = 3
+        const v = 2 * Math.PI / 30
+        var theta = 0.0
+        return function(cameraMatrix, dt) {
+            pos = vec3.fromValues(Math.cos(theta) * latDisplacement, 0.0, 0.0)
+            mat4.lookAt(cameraMatrix, pos, lookAtTarget, vec3.fromValues(0,1,0))
+            theta += v * dt
+        }
+    }()
+
+    const scene = new Scene(new Camera(mat4.create(), projectionMatrix, cameraUpdate),
+                            [smallSquare, cube, cat, sunSquare])
     
     var then = 0;
     function render(now) {
@@ -462,18 +539,8 @@ function main() {
 
         {
             gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-
-            smallSquare.update(deltaTime)
-            smallSquare.render(gl, projectionMatrix)
-
-            cube.update(deltaTime)
-            cube.render(gl, projectionMatrix)
-
-            cat.update(deltaTime)
-            cat.render(gl, projectionMatrix)
-
-            square.update(deltaTime)
-            square.render(gl, projectionMatrix)
+            scene.update(deltaTime)
+            scene.render(gl)
         }
 
         requestAnimationFrame(render);
