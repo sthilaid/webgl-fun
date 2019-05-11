@@ -2,85 +2,55 @@
 // https://developer.mozilla.org/en-US/docs/Web/API/WebGL_API/Tutorial
 // rest is written by David St-Hilaire (https://github.com/sthilaid)
 
-function makeSimpleShader(gl) {
+function makeLitShader(gl) {
         const vsSource = `
     attribute vec4 aVertexPosition;
+    attribute vec3 aVertexNormal;
+    attribute vec2 aTexCoord;
     attribute vec4 aVertexColor;
 
-    //out vec4 vertexColor;
-    varying lowp vec4 vertexColor;
+    varying highp vec4 vVertexNormal;
+    varying highp vec2 vTexCoord;
+    varying highp vec4 vertexColor;
 
+    uniform bool uUseTexture;
     uniform mat4 uModelToWorld;
     uniform mat4 uWorldToProjection;
 
     void main() {
-        vec4 pos = uWorldToProjection * uModelToWorld * aVertexPosition;
-        gl_Position = normalize(pos);
-        vertexColor = aVertexColor;
-        // float z = gl_Position.z * 0.5 + 0.5; // [-1,1] -> [0,1]
-        // float col = mix(1.0, 0.0, z); // smaller z is closer (more white)
-        // vertexColor = vec4(col, col, col, 1);
+        vec4 pos        = uWorldToProjection * uModelToWorld * aVertexPosition;
+        gl_Position     = normalize(pos);
+        vVertexNormal   = normalize(uModelToWorld * vec4(aVertexNormal, 1.0));
+        vTexCoord       = aTexCoord;
+        vertexColor     = aVertexColor;
     }
   `;
 
     const fsSource = `
-    varying lowp vec4 vertexColor;
+    varying highp vec4 vVertexNormal;
+    varying highp vec2 vTexCoord;
+    varying highp vec4 vertexColor;
 
-    void main() {
-      gl_FragColor = vertexColor;
-    }
-  `;
-
-    const shaderProgram = initShaderProgram(gl, vsSource, fsSource);
-    const shaderObject = new ShaderObject(shaderProgram)
-    shaderObject.attribLocations.vertexPosition     = gl.getAttribLocation(shaderProgram, 'aVertexPosition')
-    shaderObject.attribLocations.vertexColor        = gl.getAttribLocation(shaderProgram, 'aVertexColor')
-    shaderObject.attribLocations.texCoord           = false
-    shaderObject.uniformLocations.worldToProjection = gl.getUniformLocation(shaderProgram, 'uWorldToProjection')
-    shaderObject.uniformLocations.modelToWorld      = gl.getUniformLocation(shaderProgram, 'uModelToWorld')
-    shaderObject.uniformLocations.texture           = false
-
-    return shaderObject
-}
-
-function makeTexturedShader(gl) {
-        const vsSource = `
-    attribute vec4 aVertexPosition;
-    attribute vec2 aTexCoord;
-
-    varying lowp vec2 vTexCoord;
-
-    uniform mat4 uModelToWorld;
-    uniform mat4 uWorldToProjection;
-
-    void main() {
-        vec4 pos = uWorldToProjection * uModelToWorld * aVertexPosition;
-        gl_Position = normalize(pos);
-        vTexCoord = aTexCoord;
-    }
-  `;
-
-    const fsSource = `
-    varying lowp vec2 vTexCoord;
+    uniform bool uUseTexture;
     uniform sampler2D uTexture;
 
     void main() {
-        const lowp float threshold = 0.6;
-        gl_FragColor = texture2D(uTexture, vTexCoord);
-        if (gl_FragColor[0] < threshold && gl_FragColor[1] < threshold && gl_FragColor[2] < threshold) {
-            lowp float minColor  = min(min(gl_FragColor[0], gl_FragColor[1]), gl_FragColor[2]);
-            gl_FragColor[3] = mix(0.0, 1.0, minColor);
+        if (uUseTexture) {
+            gl_FragColor = texture2D(uTexture, vTexCoord);
+        } else {
+            gl_FragColor = vertexColor;
         }
     }
   `;
 
     const shaderProgram = initShaderProgram(gl, vsSource, fsSource);
     const shaderObject  = new ShaderObject(shaderProgram)
-    shaderObject.attribLocations.vertexPosition     = gl.getAttribLocation(shaderProgram, 'aVertexPosition')
-    shaderObject.attribLocations.vertexColor        = false
-    shaderObject.attribLocations.texCoord           = gl.getAttribLocation(shaderProgram, 'aTexCoord')
+    shaderObject.attribLocations.vertexPosition     = gl.getAttribLocation(shaderProgram,  'aVertexPosition')
+    shaderObject.attribLocations.vertexColor        = gl.getAttribLocation(shaderProgram,  'aVertexColor')
+    shaderObject.attribLocations.texCoord           = gl.getAttribLocation(shaderProgram,  'aTexCoord')
     shaderObject.uniformLocations.worldToProjection = gl.getUniformLocation(shaderProgram, 'uWorldToProjection')
     shaderObject.uniformLocations.modelToWorld      = gl.getUniformLocation(shaderProgram, 'uModelToWorld')
+    shaderObject.uniformLocations.useTexture        = gl.getUniformLocation(shaderProgram, 'uUseTexture')
     shaderObject.uniformLocations.texture           = gl.getUniformLocation(shaderProgram, 'uTexture')
 
     return shaderObject
@@ -95,10 +65,9 @@ function main() {
         return;
     }
 
-    initGL(gl)
+    initGL(gl);
 
-    const simpleShader  = makeSimpleShader(gl)
-    const textureShader = makeTexturedShader(gl)
+    const litShader     = makeLitShader(gl)
 
     const planeBuffers  = initPlaneBuffers(gl)
     const cubeBuffers   = initCubeBuffers(gl)
@@ -116,21 +85,21 @@ function main() {
         }
     }
         
-    const sunSquare = new SceneObject("sunSquare", textureShader, planeBuffers, makeRotationUpdate([0,0,1], Math.PI * 0.05))
+    const sunSquare = new SceneObject("sunSquare", litShader, planeBuffers, makeRotationUpdate([0,0,1], Math.PI * 0.05))
     sunSquare.texture = loadTexture(gl, "sun.jpg")
     mat4.fromRotationTranslationScale(sunSquare.modelToWorld, quat.create(),
                                       [-0.0, 0.0, -6.0], [1,1,1])
 
-    const smallSquare = new SceneObject("smallSquare", simpleShader, planeBuffers, makeRotationUpdate([0,0,-1], Math.PI * 0.1))
+    const smallSquare = new SceneObject("smallSquare", litShader, planeBuffers, makeRotationUpdate([0,0,-1], Math.PI * 0.1))
     mat4.fromRotationTranslationScale(smallSquare.modelToWorld, quat.create(),
                                       [0.5, -0.3, -3.0], [0.25, 0.25, 1])
 
-    const cube = new SceneObject("cube", simpleShader, cubeBuffers, makeRotationUpdate(vec3.normalize(vec3.create(), [1,1,-1]),
+    const cube = new SceneObject("cube", litShader, cubeBuffers, makeRotationUpdate(vec3.normalize(vec3.create(), [1,1,-1]),
                                                                                Math.PI * 0.15))
     mat4.fromRotationTranslationScale(cube.modelToWorld, quat.create(),
                                       [-2.0, -1.0, -10.0], [1, 1, 1])
 
-    const cat = new SceneObject("cat", simpleShader, catBuffers, makeRotationUpdate(vec3.normalize(vec3.create(), [0,1,0]),
+    const cat = new SceneObject("cat", litShader, catBuffers, makeRotationUpdate(vec3.normalize(vec3.create(), [0,1,0]),
                                                                              Math.PI * 0.1))
     mat4.fromRotationTranslationScale(cat.modelToWorld, quat.create(),
                                       [4, -4, -10.0], [0.01, 0.01, 0.01])

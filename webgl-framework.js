@@ -45,6 +45,23 @@ function initShaderProgram(gl, vsSource, fsSource) {
     return shaderProgram;
 }
 
+class ShaderObject {
+    constructor(shaderProgram) {
+        this.program = shaderProgram
+        this.attribLocations = {
+            vertexPosition: false,
+            vertexColor:    false,
+            texCoord:       false,
+        }
+        this.uniformLocations = {
+            worldToProjection:  false,
+            modelToWorld:       false,
+            useTexture:         false,
+            texture:            false,
+        }
+    }
+}
+
 function isPowerOf2(value) {
   return (value & (value - 1)) == 0;
 }
@@ -223,10 +240,11 @@ function initMeshBuffers(gl, meshData) {
 
 class Camera {
     constructor(initMatrix, projMatrix, updateFn) {
-        this.matrix     = initMatrix
-        this.projMatrix = projMatrix
-        this.updateFn   = updateFn
-        this.invMatrix  = mat4.create()
+        this.matrix             = initMatrix
+        this.projMatrix         = projMatrix
+        this.updateFn           = updateFn
+        this.invMatrix          = mat4.create()
+        this.worldToProjection  = mat4.create()
         mat4.invert(this.invMatrix, this.matrix)
     }
 
@@ -235,36 +253,40 @@ class Camera {
             this.updateFn(this.matrix, dt)
 
         mat4.invert(this.invMatrix, this.matrix)
+        mat4.multiply(this.worldToProjection, this.projMatrix, this.invMatrix)
     }
 }
 
 class SceneObject {
     constructor(id, programInfo, buffers, updateFn) {
-        this.shaderProgram      = programInfo;
+        this.shaderObject       = programInfo;
         this.buffers            = buffers;
         this.texture            = false
         this.updateFn           = updateFn;
-        this.modelViewMatrix    = mat4.create();
+        this.modelToWorld    = mat4.create();
     }
 
     update(dt) {
         this.updateFn(this, dt)
     }
 
-    render(gl, cameraInvMatrix, projectionMatrix) {
+    render(gl, worldToProjection) {
         const normalize = false;
         const stride = 0;
         const offset = 0;
 
         // ---- Vertex buffer
-        if (this.buffers.position && this.shaderProgram.attribLocations.vertexPosition !== false)
-        {
-            gl.bindBuffer(gl.ARRAY_BUFFER, this.buffers.position.buffer);
-            gl.vertexAttribPointer(this.shaderProgram.attribLocations.vertexPosition,
-                                   this.buffers.position.comp,
-                                   this.buffers.position.type,
-                                   normalize, stride, offset);
-            gl.enableVertexAttribArray(this.shaderProgram.attribLocations.vertexPosition);
+        if (this.shaderObject.attribLocations.vertexPosition !== false) {
+            if (this.buffers.position) {
+                gl.bindBuffer(gl.ARRAY_BUFFER, this.buffers.position.buffer);
+                gl.vertexAttribPointer(this.shaderObject.attribLocations.vertexPosition,
+                                       this.buffers.position.comp,
+                                       this.buffers.position.type,
+                                       normalize, stride, offset);
+                gl.enableVertexAttribArray(this.shaderObject.attribLocations.vertexPosition);
+            } else {
+                gl.disableVertexAttribArray(this.shaderObject.attribLocations.vertexPosition);
+            }
         }
 
         // ---- indices buffer
@@ -273,49 +295,57 @@ class SceneObject {
             gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.buffers.indices.buffer);
         }
 
-        if (this.buffers.uvs && this.shaderProgram.attribLocations.texCoord !== false)
-        {
-            gl.bindBuffer(gl.ARRAY_BUFFER, this.buffers.uvs.buffer);
-            gl.vertexAttribPointer(this.shaderProgram.attribLocations.texCoord,
-                                   this.buffers.uvs.comp,
-                                   this.buffers.uvs.type,
-                                   normalize, stride, offset)
-            gl.enableVertexAttribArray(this.shaderProgram.attribLocations.texCoord);
+        if (this.shaderObject.attribLocations.texCoord !== false) {
+            if (this.buffers.uvs) {
+                gl.bindBuffer(gl.ARRAY_BUFFER, this.buffers.uvs.buffer);
+                gl.vertexAttribPointer(this.shaderObject.attribLocations.texCoord,
+                                       this.buffers.uvs.comp,
+                                       this.buffers.uvs.type,
+                                       normalize, stride, offset)
+                gl.enableVertexAttribArray(this.shaderObject.attribLocations.texCoord);
+            } else {
+                gl.disableVertexAttribArray(this.shaderObject.attribLocations.texCoord);
+            }
         }
 
         // ---- Color buffer
-        if (this.buffers.color && this.shaderProgram.attribLocations.vertexColor !== false)
-        {
-            gl.bindBuffer(gl.ARRAY_BUFFER, this.buffers.color.buffer);
-            gl.vertexAttribPointer(this.shaderProgram.attribLocations.vertexColor,
-                                   this.buffers.color.comp,
-                                   this.buffers.color.type,
-                                   normalize, stride, offset)
-            gl.enableVertexAttribArray(this.shaderProgram.attribLocations.vertexColor);
+        if (this.shaderObject.attribLocations.vertexColor !== false) {
+            if (this.buffers.color) {
+                gl.bindBuffer(gl.ARRAY_BUFFER, this.buffers.color.buffer);
+                gl.vertexAttribPointer(this.shaderObject.attribLocations.vertexColor,
+                                       this.buffers.color.comp,
+                                       this.buffers.color.type,
+                                       normalize, stride, offset)
+                gl.enableVertexAttribArray(this.shaderObject.attribLocations.vertexColor);
+            } else {
+                gl.disableVertexAttribArray(this.shaderObject.attribLocations.vertexColor);
+            }
         }
 
         // ---- Shader and uniform inputs
-        gl.useProgram(this.shaderProgram.program);
+        gl.useProgram(this.shaderObject.program);
 
         gl.uniformMatrix4fv(
-            this.shaderProgram.uniformLocations.projectionMatrix,
+            this.shaderObject.uniformLocations.worldToProjection,
             false,
-            projectionMatrix);
+            worldToProjection);
 
         gl.uniformMatrix4fv(
-            this.shaderProgram.uniformLocations.viewInvMatrix,
+            this.shaderObject.uniformLocations.modelToWorld,
             false,
-            viewInvMatrix);
+            this.modelToWorld);
 
-        gl.uniformMatrix4fv(
-            this.shaderProgram.uniformLocations.modelViewMatrix,
-            false,
-            this.modelViewMatrix);
+        const useTexture = this.texture !== false
+        if(this.shaderObject.uniformLocations.useTexture !== false) {
+            gl.uniform1i(
+                this.shaderObject.uniformLocations.useTexture,
+                useTexture);
+        }
 
-        if (this.texture !== false && this.shaderProgram.uniformLocations.texture !== false) {
+        if (useTexture && this.shaderObject.uniformLocations.texture !== false) {
             gl.activeTexture(gl.TEXTURE0)
             gl.bindTexture(gl.TEXTURE_2D, this.texture)
-            gl.uniform1i(this.shaderProgram.uniformLocations.texture, 0)
+            gl.uniform1i(this.shaderObject.uniformLocations.texture, 0)
         }
 
         // ---- draw call
@@ -355,7 +385,7 @@ class Scene {
 
     render(gl) {
         if (this.objects !== false) {
-            this.objects.forEach(obj => obj.render(gl, this.camera.invMatrix, this.camera.projMatrix))
+            this.objects.forEach(obj => obj.render(gl, this.camera.worldToProjection))
         } else {
             console.warn("No scene objects registered...")
         }
