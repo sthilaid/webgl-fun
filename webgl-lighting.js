@@ -5,7 +5,7 @@
 function makeLitShader(gl) {
         const vsSource = `
     attribute vec4 aVertexPosition;
-    attribute vec3 aVertexNormal;
+    attribute vec4 aVertexNormal;
     attribute vec2 aTexCoord;
     attribute vec4 aVertexColor;
 
@@ -20,7 +20,7 @@ function makeLitShader(gl) {
     void main() {
         vec4 pos        = uWorldToProjection * uModelToWorld * aVertexPosition;
         gl_Position     = normalize(pos);
-        vVertexNormal   = normalize(uModelToWorld * vec4(aVertexNormal, 1.0));
+        vVertexNormal   = normalize(uModelToWorld * aVertexNormal);
         vTexCoord       = aTexCoord;
         vertexColor     = aVertexColor;
     }
@@ -35,10 +35,11 @@ function makeLitShader(gl) {
     uniform sampler2D uTexture;
 
     void main() {
+        highp vec4 n = normalize(vVertexNormal);
         if (uUseTexture) {
             gl_FragColor = texture2D(uTexture, vTexCoord);
         } else {
-            gl_FragColor = vertexColor;
+            gl_FragColor = vertexColor + 0.01 * vVertexNormal; // TEMP USE OF Normal
         }
     }
   `;
@@ -46,15 +47,17 @@ function makeLitShader(gl) {
     const shaderProgram = initShaderProgram(gl, vsSource, fsSource);
     const shaderObject  = new ShaderObject(shaderProgram)
     shaderObject.attribLocations.vertexPosition     = gl.getAttribLocation(shaderProgram,  'aVertexPosition')
-    shaderObject.attribLocations.vertexColor        = gl.getAttribLocation(shaderProgram,  'aVertexColor')
+    shaderObject.attribLocations.vertexNormal       = gl.getAttribLocation(shaderProgram,  'aVertexNormal')
     shaderObject.attribLocations.texCoord           = gl.getAttribLocation(shaderProgram,  'aTexCoord')
+    shaderObject.attribLocations.vertexColor        = gl.getAttribLocation(shaderProgram,  'aVertexColor')
     shaderObject.uniformLocations.worldToProjection = gl.getUniformLocation(shaderProgram, 'uWorldToProjection')
     shaderObject.uniformLocations.modelToWorld      = gl.getUniformLocation(shaderProgram, 'uModelToWorld')
     shaderObject.uniformLocations.useTexture        = gl.getUniformLocation(shaderProgram, 'uUseTexture')
     shaderObject.uniformLocations.texture           = gl.getUniformLocation(shaderProgram, 'uTexture')
-
+    test = shaderObject
     return shaderObject
 }
+var test = false
 
 function main() {
     const canvas = document.querySelector('#glcanvas');

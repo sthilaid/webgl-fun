@@ -50,6 +50,7 @@ class ShaderObject {
         this.program = shaderProgram
         this.attribLocations = {
             vertexPosition: false,
+            vertexNormal:   false,
             vertexColor:    false,
             texCoord:       false,
         }
@@ -125,6 +126,16 @@ function initPlaneBuffers(gl) {
     gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(positions), gl.STATIC_DRAW);
 
+    const normals = [
+        0.0, 0.0, -1.0, 0.0,
+        0.0, 0.0, -1.0, 0.0,
+        0.0, 0.0, -1.0, 0.0,
+        0.0, 0.0, -1.0, 0.0,
+    ];
+    const normalBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, normalBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(normals), gl.STATIC_DRAW);
+
     const uvs = [
         1.0, 1.0,
         0.0, 1.0,
@@ -149,6 +160,7 @@ function initPlaneBuffers(gl) {
         type:           gl.TRIANGLE_STRIP,
         vertexCount:    4,
         position:       {buffer: positionBuffer,    comp: 2, type: gl.FLOAT},
+        normal:         {buffer: normalBuffer,      comp: 4, type: gl.FLOAT},
         uvs:            {buffer: uvBuffer,          comp: 2, type: gl.FLOAT},
         indices:        false,
         color:          {buffer: colorBuffer,       comp: 4, type: gl.FLOAT},
@@ -169,6 +181,19 @@ function initCubeBuffers(gl) {
     const positionBuffer = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(positions), gl.STATIC_DRAW);
+
+    const normals = [0.5773502588272095, 0.5773502588272095, 0.5773502588272095,    0.0,    // 0
+                     0.5773502588272095, -0.5773502588272095, 0.5773502588272095,   0.0,   // 1
+                     -0.5773502588272095, -0.5773502588272095, 0.5773502588272095,  0.0,  // 2
+                     -0.5773502588272095, -0.5773502588272095, 0.5773502588272095,  0.0,  // 3
+                     0.5773502588272095, 0.5773502588272095, -0.5773502588272095,   0.0,   // 4
+                     0.5773502588272095, -0.5773502588272095, -0.5773502588272095,  0.0,  // 5
+                     -0.5773502588272095, 0.5773502588272095, -0.5773502588272095,  0.0,  // 6
+                     -0.5773502588272095, -0.5773502588272095, -0.5773502588272095,     0.0, // 7
+    ];
+    const normalBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, normalBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(normals), gl.STATIC_DRAW);
 
     const indices = [0, 1, 3, 0, 3, 2, // front
                      0, 5, 1, 0, 4, 5, // right
@@ -199,6 +224,7 @@ function initCubeBuffers(gl) {
         type:           gl.TRIANGLES,
         vertexCount:    indices.length,
         position:       {buffer: positionBuffer,    comp: 3, type: gl.FLOAT},
+        normal:         {buffer: normalBuffer,      comp: 4, type: gl.FLOAT},
         uvs:            false,
         indices:        {buffer: indicesBuffer,     comp: 3, type: gl.UNSIGNED_SHORT},
         color:          {buffer: colorBuffer,       comp: 4, type: gl.FLOAT},
@@ -231,7 +257,7 @@ function initMeshBuffers(gl, meshData) {
         type:           gl.TRIANGLES,
         vertexCount:    vertexCount,
         position:       {buffer: mesh.vertexBuffer, comp: 3, type: gl.FLOAT},
-        normals:        {buffer: mesh.normalBuffer, comp: 3, type: gl.FLOAT},
+        // normals:        {buffer: mesh.normalBuffer, comp: 3, type: gl.FLOAT},
         uvs:            false,
         indices:        {buffer: mesh.indexBuffer,  comp: 3, type: gl.UNSIGNED_SHORT},
         color:          {buffer: colorBuffer,       comp: 4, type: gl.FLOAT},
@@ -295,6 +321,21 @@ class SceneObject {
             gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, this.buffers.indices.buffer);
         }
 
+        // ---- normals
+        if (this.shaderObject.attribLocations.vertexNormal !== false) {
+            if (this.buffers.normal) {
+                gl.bindBuffer(gl.ARRAY_BUFFER, this.buffers.normal.buffer);
+                gl.vertexAttribPointer(this.shaderObject.attribLocations.vertexNormal,
+                                       this.buffers.normal.comp,
+                                       this.buffers.normal.type,
+                                       normalize, stride, offset)
+                gl.enableVertexAttribArray(this.shaderObject.attribLocations.vertexNormal);
+            } else {
+                gl.disableVertexAttribArray(this.shaderObject.attribLocations.vertexNormal);
+            }
+        }
+
+        // ---- uvs
         if (this.shaderObject.attribLocations.texCoord !== false) {
             if (this.buffers.uvs) {
                 gl.bindBuffer(gl.ARRAY_BUFFER, this.buffers.uvs.buffer);
