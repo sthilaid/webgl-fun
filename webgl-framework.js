@@ -117,6 +117,18 @@ function loadTexture(gl, url) {
   return texture;
 }
 
+class ObjectBuffers {
+    constructor() {
+        this.type       = false
+        this.vertexCount= false
+        this.position   = false
+        this.normal     = false
+        this.uvs        = false
+        this.indices    = false
+        this.color      = false
+    }
+}
+
 
 function initPlaneBuffers(gl) {
     const positions = [
@@ -159,27 +171,28 @@ function initPlaneBuffers(gl) {
     gl.bindBuffer(gl.ARRAY_BUFFER, colorBuffer);
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(colors), gl.STATIC_DRAW);
 
-    return {
-        type:           gl.TRIANGLE_STRIP,
-        vertexCount:    4,
-        position:       {buffer: positionBuffer,    comp: 2, type: gl.FLOAT},
-        normal:         {buffer: normalBuffer,      comp: 4, type: gl.FLOAT},
-        uvs:            {buffer: uvBuffer,          comp: 2, type: gl.FLOAT},
-        indices:        false,
-        color:          {buffer: colorBuffer,       comp: 4, type: gl.FLOAT},
-    };
+    var bufObject = new ObjectBuffers()
+    bufObject.type          = gl.TRIANGLE_STRIP
+    bufObject.vertexCount   = 4
+    bufObject.position      = {buffer: positionBuffer,    comp: 2, type: gl.FLOAT}
+    bufObject.normal        = {buffer: normalBuffer,      comp: 4, type: gl.FLOAT}
+    bufObject.uvs           = {buffer: uvBuffer,          comp: 2, type: gl.FLOAT}
+    bufObject.color         = {buffer: colorBuffer,       comp: 4, type: gl.FLOAT}
+
+    return bufObject;
 }
 
 
-function initCubeBuffers(gl) {
-    const positions = [1.0, 1.0, 1.0,       // 0
-                       1.0, -1.0, 1.0,      // 1
-                       -1.0, 1.0, 1.0,      // 2
-                       -1.0, -1.0, 1.0,     // 3
-                       1.0, 1.0, -1.0,      // 4
-                       1.0, -1.0, -1.0,     // 5
-                       -1.0, 1.0, -1.0,     // 6
-                       -1.0, -1.0, -1.0,    // 7
+function initCubeBuffers(gl, sideLength = 1) {
+    const delta = sideLength * 0.5
+    const positions = [delta, delta, delta,       // 0
+                       delta, -delta, delta,      // 1
+                       -delta, delta, delta,      // 2
+                       -delta, -delta, delta,     // 3
+                       delta, delta, -delta,      // 4
+                       delta, -delta, -delta,     // 5
+                       -delta, delta, -delta,     // 6
+                       -delta, -delta, -delta,    // 7
     ];
     const positionBuffer = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
@@ -224,15 +237,86 @@ function initCubeBuffers(gl) {
     gl.bindBuffer(gl.ARRAY_BUFFER, colorBuffer);
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(colors), gl.STATIC_DRAW);
 
-    return {
-        type:           gl.TRIANGLES,
-        vertexCount:    indices.length,
-        position:       {buffer: positionBuffer,    comp: 3, type: gl.FLOAT},
-        normal:         {buffer: normalBuffer,      comp: 4, type: gl.FLOAT},
-        uvs:            false,
-        indices:        {buffer: indicesBuffer,     comp: 3, type: gl.UNSIGNED_SHORT},
-        color:          {buffer: colorBuffer,       comp: 4, type: gl.FLOAT},
-    };
+    var bufObject = new ObjectBuffers()
+    bufObject.type          = gl.TRIANGLES
+    bufObject.vertexCount   = indices.length
+    bufObject.position      = {buffer: positionBuffer,    comp: 3, type: gl.FLOAT}
+    bufObject.normal        = {buffer: normalBuffer,      comp: 4, type: gl.FLOAT}
+    bufObject.indices       = {buffer: indicesBuffer,     comp: 3, type: gl.UNSIGNED_SHORT}
+    bufObject.color         = {buffer: colorBuffer,       comp: 4, type: gl.FLOAT}
+    return bufObject
+}
+
+function initSphereBuffers(gl, radius, subdivisions = 0) {
+    const octahedroneVertices = [0.0, -radius,  0.0,
+                                 radius,  0.0,  0.0,
+                                 0.0,  0.0,  radius,
+                                 -radius,  0.0,  0.0,
+                                 0.0,  0.0, -radius,
+                                 0.0,  radius,  0.0,
+                                ]
+
+    var sphereVertices = octahedroneVertices // for now
+    const positionBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(sphereVertices), gl.STATIC_DRAW);
+
+    const octahedroneIndices = [0,    1,    2,
+                                0,    2,    3,
+                                0,    3,    4,
+                                0,    4,    1,
+                                1,    5,    2,
+                                2,    5,    3,
+                                3,    5,    4,
+                                4,    5,    1,
+                               ]
+    var sphereIndices = octahedroneIndices // for now
+
+    for (var i=0; i<subdivisions; ++i) {
+        
+    }
+    
+    const indicesBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indicesBuffer);
+    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array(sphereIndices), gl.STATIC_DRAW);
+
+    var sphereNormals = []
+    const vertCount = sphereVertices.length / 3
+    for (var vertIndex=0; vertIndex<vertCount; ++vertIndex) {
+        const compIndex = vertIndex * 3
+        const v = vec4.fromValues(sphereVertices[compIndex],
+                                  sphereVertices[compIndex+1],
+                                  sphereVertices[compIndex+2],
+                                  0.0)
+        const n = vec4.normalize(vec4.create(), v)
+        sphereNormals = sphereNormals.concat([n[0], n[1], n[2], n[3]])
+    }
+
+    const normalBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, normalBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(sphereNormals), gl.STATIC_DRAW);
+
+
+    var sphereColors = []
+    for (var vertIndex=0; vertIndex<vertCount; ++vertIndex) {
+        sphereColors = sphereColors.concat([Math.random(),
+                                            Math.random(),
+                                            Math.random(),
+                                            1.0])
+    }
+    const colorBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, colorBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(sphereColors), gl.STATIC_DRAW);
+
+
+    var bufObject = new ObjectBuffers()
+    bufObject.type          = gl.TRIANGLES
+    bufObject.vertexCount   = sphereIndices.length
+    bufObject.position      = {buffer: positionBuffer,    comp: 3, type: gl.FLOAT}
+    bufObject.normal        = {buffer: normalBuffer,      comp: 4, type: gl.FLOAT}
+    bufObject.indices       = {buffer: indicesBuffer,     comp: 3, type: gl.UNSIGNED_SHORT}
+    bufObject.color         = {buffer: colorBuffer,       comp: 4, type: gl.FLOAT}
+    return bufObject
 }
 
 function initMeshBuffers(gl, meshData) {
@@ -261,15 +345,14 @@ function initMeshBuffers(gl, meshData) {
     gl.bindBuffer(gl.ARRAY_BUFFER, colorBuffer);
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(vertexColors), gl.STATIC_DRAW);
 
-    return {
-        type:           gl.TRIANGLES,
-        vertexCount:    vertexCount,
-        position:       {buffer: mesh.vertexBuffer, comp: 3, type: gl.FLOAT},
-        normal:         {buffer: mesh.normalBuffer, comp: 3, type: gl.FLOAT},
-        uvs:            false,
-        indices:        {buffer: mesh.indexBuffer,  comp: 3, type: gl.UNSIGNED_SHORT},
-        color:          {buffer: colorBuffer,       comp: 4, type: gl.FLOAT},
-    };
+    var bufObject = new ObjectBuffers()
+    bufObject.type          = gl.TRIANGLES
+    bufObject.vertexCount   = vertexCount
+    bufObject.position      = {buffer: mesh.vertexBuffer, comp: 3, type: gl.FLOAT}
+    bufObject.normal        = {buffer: mesh.normalBuffer, comp: 3, type: gl.FLOAT}
+    bufObject.indices       = {buffer: mesh.indexBuffer,  comp: 3, type: gl.UNSIGNED_SHORT}
+    bufObject.color         = {buffer: colorBuffer,       comp: 4, type: gl.FLOAT}
+    return bufObject
 }
 
 class Camera {
