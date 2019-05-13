@@ -138,8 +138,9 @@ function main() {
     const litShader     = makeLitShader(gl)
 
     const planeBuffers  = initPlaneBuffers(gl)
-    const cubeBuffers   = initCubeBuffers(gl)
+    const cubeBuffers   = initCubeBuffers(gl, 2)
     const catBuffers    = initMeshBuffers(gl, catMeshData)
+    const sphereBuffers = initSphereBuffers(gl, 1.0, 0)
 
     const makeRotationUpdate = function(axis, angularSpeed = Math.PI * 0.25) {
         var angle           = 0
@@ -173,6 +174,12 @@ function main() {
                                                                              Math.PI * 0.1))
     mat4.fromRotationTranslationScale(cat.modelToWorld, quat.create(),
                                       [4, -4, -10.0], [0.01, 0.01, 0.01])
+
+    const sphereRotAxis = vec3.normalize(vec3.create(), vec3.fromValues(1, 1, 1))
+    const sphere = new SceneObject("sphere", litShader, sphereBuffers, makeRotationUpdate(sphereRotAxis,
+                                                                                          Math.PI * 0.1))
+    mat4.fromRotationTranslationScale(sphere.modelToWorld, quat.create(),
+                                      [3, 2, -8.0], [1,1,1])
 
     const fieldOfView = 45 * Math.PI / 180;   // in radians
     const aspect = gl.canvas.clientWidth / gl.canvas.clientHeight;
@@ -218,7 +225,7 @@ function main() {
     const light = new Light(lightMat, LightTypes.omni, lightUpdate)
 
     const scene = new Scene(new Camera(mat4.create(), projectionMatrix, cameraUpdate),
-                            [smallSquare, cube, cat, sunSquare],
+                            [smallSquare, sphere, cube, cat, sunSquare],
                             [light])
     var then = 0;
     function render(now) {
