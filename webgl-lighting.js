@@ -53,7 +53,7 @@ function makeLitShader(gl) {
 
     uniform Light uLights[5];
     uniform int uLightCount;
-    uniform vec4 uViewPosition;
+    uniform vec3 uViewPosition;
 
     vec4 unlit(vec3 n, vec3 v) {
         return vec4(0.1, 0.1, 0.1, 1.0);
@@ -83,7 +83,7 @@ function makeLitShader(gl) {
             fragBaseColor = vertexColor;
         }
 
-        vec3 fragToView     = normalize(uViewPosition - vVertexPos).xyz;
+        vec3 fragToView     = normalize(uViewPosition - vVertexPos.xyz).xyz;
         vec3 fragNormal     = normalize(vVertexNormal).xyz;
         vFragmentColor      = unlit(fragNormal, fragToView);
 
@@ -94,11 +94,6 @@ function makeLitShader(gl) {
             vFragmentColor          += clamp(dot(fragToLight, fragNormal), 0.0, 1.0) * lightColor * fragBaseColor;
             vFragmentColor[3]       = 1.0;
         }
-
-        // fdist(r) = max(0, (1 - (r / rmax)^2))^2
-        // fdir(l) = clamp01((cos(theta_s) - cos(theta_u)) / cos(theta_p) - cos(theta_u))^2 // spot light
-        // c_light = k_light * fdist(r) * fdir(l)
-        // c_shaded = funlit(n,v) + sum(clamp01(dot(l_i, n)) * c_light_i * flit(l_i, n, v))
     }
   `;
 
