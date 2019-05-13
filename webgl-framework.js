@@ -14,14 +14,14 @@ function initGL(gl) {
 }
 
 function initShaderProgram(gl, vsSource, fsSource) {
-    function loadShader(gl, type, source) {
+    function loadShader(gl, type, source, debugTxt="") {
         const shader = gl.createShader(type);
 
         gl.shaderSource(shader, source);
         gl.compileShader(shader);
 
         if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
-            alert('An error occurred compiling the shaders: ' + gl.getShaderInfoLog(shader));
+            alert('An error occurred compiling the '+debugTxt+'shaders: ' + gl.getShaderInfoLog(shader));
             gl.deleteShader(shader);
             return null;
         }
@@ -29,8 +29,8 @@ function initShaderProgram(gl, vsSource, fsSource) {
         return shader;
     }
 
-    const vertexShader      = loadShader(gl, gl.VERTEX_SHADER, vsSource);
-    const fragmentShader    = loadShader(gl, gl.FRAGMENT_SHADER, fsSource);
+    const vertexShader      = loadShader(gl, gl.VERTEX_SHADER, vsSource, "vertex ");
+    const fragmentShader    = loadShader(gl, gl.FRAGMENT_SHADER, fsSource, "fragment ");
 
     const shaderProgram     = gl.createProgram();
     gl.attachShader(shaderProgram, vertexShader);
@@ -59,6 +59,9 @@ class ShaderObject {
             modelToWorld:       false,
             useTexture:         false,
             texture:            false,
+            lights:             false,
+            lightCount:         false,
+            viewPosition:       false,
         }
     }
 }
@@ -127,10 +130,10 @@ function initPlaneBuffers(gl) {
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(positions), gl.STATIC_DRAW);
 
     const normals = [
-        0.0, 0.0, -1.0, 0.0,
-        0.0, 0.0, -1.0, 0.0,
-        0.0, 0.0, -1.0, 0.0,
-        0.0, 0.0, -1.0, 0.0,
+        0.0, 0.0, 1.0, 0.0,
+        0.0, 0.0, 1.0, 0.0,
+        0.0, 0.0, 1.0, 0.0,
+        0.0, 0.0, 1.0, 0.0,
     ];
     const normalBuffer = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, normalBuffer);
@@ -182,14 +185,15 @@ function initCubeBuffers(gl) {
     gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(positions), gl.STATIC_DRAW);
 
-    const normals = [0.5773502588272095, 0.5773502588272095, 0.5773502588272095,    0.0,    // 0
-                     0.5773502588272095, -0.5773502588272095, 0.5773502588272095,   0.0,   // 1
-                     -0.5773502588272095, -0.5773502588272095, 0.5773502588272095,  0.0,  // 2
-                     -0.5773502588272095, -0.5773502588272095, 0.5773502588272095,  0.0,  // 3
-                     0.5773502588272095, 0.5773502588272095, -0.5773502588272095,   0.0,   // 4
-                     0.5773502588272095, -0.5773502588272095, -0.5773502588272095,  0.0,  // 5
-                     -0.5773502588272095, 0.5773502588272095, -0.5773502588272095,  0.0,  // 6
-                     -0.5773502588272095, -0.5773502588272095, -0.5773502588272095,     0.0, // 7
+    const normVal = 0.5773502588272095
+    const normals = [normVal, normVal, normVal,    0.0,    // 0
+                     normVal, -normVal, normVal,   0.0,   // 1
+                     -normVal, normVal, normVal,  0.0,  // 2
+                     -normVal, -normVal, normVal,  0.0,  // 3
+                     normVal, normVal, -normVal,   0.0,   // 4
+                     normVal, -normVal, -normVal,  0.0,  // 5
+                     -normVal, normVal, -normVal,  0.0,  // 6
+                     -normVal, -normVal, -normVal,     0.0, // 7
     ];
     const normalBuffer = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, normalBuffer);
@@ -233,6 +237,10 @@ function initCubeBuffers(gl) {
 
 function initMeshBuffers(gl, meshData) {
     mesh = new OBJ.Mesh(meshData)
+    if (!OBJ.areNormalValid) {
+        OBJ.generateNormals(mesh)
+        //console.log("generated normals: "+mesh.vertexNormals)
+    }
     OBJ.initMeshBuffers(gl, mesh)
 
     // mesh.normalBuffer
@@ -257,7 +265,7 @@ function initMeshBuffers(gl, meshData) {
         type:           gl.TRIANGLES,
         vertexCount:    vertexCount,
         position:       {buffer: mesh.vertexBuffer, comp: 3, type: gl.FLOAT},
-        // normals:        {buffer: mesh.normalBuffer, comp: 3, type: gl.FLOAT},
+        normal:         {buffer: mesh.normalBuffer, comp: 3, type: gl.FLOAT},
         uvs:            false,
         indices:        {buffer: mesh.indexBuffer,  comp: 3, type: gl.UNSIGNED_SHORT},
         color:          {buffer: colorBuffer,       comp: 4, type: gl.FLOAT},
@@ -266,20 +274,22 @@ function initMeshBuffers(gl, meshData) {
 
 class Camera {
     constructor(initMatrix, projMatrix, updateFn) {
-        this.matrix             = initMatrix
+        this.localToWorld       = initMatrix
         this.projMatrix         = projMatrix
         this.updateFn           = updateFn
-        this.invMatrix          = mat4.create()
+        this.worldToLocal       = mat4.create()
         this.worldToProjection  = mat4.create()
-        mat4.invert(this.invMatrix, this.matrix)
+        this.viewPosition       = vec3.create()
+        mat4.invert(this.worldToLocal, this.localToWorld)
     }
 
     update(dt) {
         if (this.updateFn !== false)
-            this.updateFn(this.matrix, dt)
+            this.updateFn(this.localToWorld, dt)
 
-        mat4.invert(this.invMatrix, this.matrix)
-        mat4.multiply(this.worldToProjection, this.projMatrix, this.invMatrix)
+        mat4.invert(this.worldToLocal, this.localToWorld)
+        mat4.multiply(this.worldToProjection, this.projMatrix, this.worldToLocal)
+        mat4.getTranslation(this.viewPosition, this.localToWorld)
     }
 }
 
@@ -296,7 +306,7 @@ class SceneObject {
         this.updateFn(this, dt)
     }
 
-    render(gl, worldToProjection) {
+    render(gl, worldToProjection, viewPosition, sceneLights) {
         const normalize = false;
         const stride = 0;
         const offset = 0;
@@ -389,6 +399,30 @@ class SceneObject {
             gl.uniform1i(this.shaderObject.uniformLocations.texture, 0)
         }
 
+        if (this.shaderObject.uniformLocations.viewPosition !== false) {
+            gl.uniform3f(this.shaderObject.uniformLocations.viewPosition,
+                         viewPosition[0],
+                         viewPosition[1],
+                         viewPosition[2])
+        }
+
+        if (this.shaderObject.uniformLocations.lights !== false
+            && this.shaderObject.uniformLocations.lightCount !== false
+            && sceneLights.length > 0) {
+            gl.uniform1i(this.shaderObject.uniformLocations.lightCount, sceneLights.length)
+            for (var i=0; i < sceneLights.length; ++i) {
+                gl.uniform3f(this.shaderObject.uniformLocations.lights[i].pos,
+                             sceneLights[i].pos[0],
+                             sceneLights[i].pos[1],
+                             sceneLights[i].pos[2])
+                gl.uniform3f(this.shaderObject.uniformLocations.lights[i].dir,
+                             sceneLights[i].dir[0],
+                             sceneLights[i].dir[1],
+                             sceneLights[i].dir[2])
+                gl.uniform1i(this.shaderObject.uniformLocations.lights[i].type, sceneLights[i].type)
+            }
+        }
+
         // ---- draw call
         if (this.buffers.indices)
             gl.drawElements(this.buffers.type, this.buffers.vertexCount, this.buffers.indices.type, offset);
@@ -397,10 +431,40 @@ class SceneObject {
     }
 }
 
+const LightTypes = {"directional" : 0, "omni" : 1, "spot" : 2}
+class Light {
+    constructor(initMat, type, updateFn) {
+        this.localToWorld   = initMat
+        this.updateFn       = updateFn
+        this.pos            = vec3.create()
+        this.dir            = vec3.create()
+        this.type           = type
+        this.updateData()
+
+        if (this.type < 0 || this.type > 2) {
+            alert('Invalid light type: '+this.type)
+        }
+    }
+
+    update(dt) {
+        if (this.updateFn !== false) {
+            this.updateFn(this.localToWorld, dt)
+        }
+        this.updateData()
+    }
+
+    updateData() {
+        vec3.transformMat4(this.dir, vec3.fromValues(0,0,1), this.localToWorld)
+        vec3.normalize(this.dir, this.dir)
+        mat4.getTranslation(this.pos, this.localToWorld)
+    }
+}
+
 class Scene {
-    constructor(camera, objects) {
-        this.camera     = camera
-        this.objects    = objects
+    constructor(camera, objects, lights=[]) {
+        this.camera         = camera
+        this.objects        = objects
+        this.lights         = lights
 
         if (!(camera instanceof Camera)) {
             console.error("no Camera instance defined in scene")
@@ -422,11 +486,17 @@ class Scene {
         } else {
             console.warn("No scene camera registered...")
         }
+        if (this.lights !== false) {
+            this.lights.forEach(l => l.update(dt))
+        } else {
+            console.warn("No scene lights registered...")
+        }
     }
 
     render(gl) {
         if (this.objects !== false) {
-            this.objects.forEach(obj => obj.render(gl, this.camera.worldToProjection))
+            const viewPosition = this.camera.matrix
+            this.objects.forEach(obj => obj.render(gl, this.camera.worldToProjection, this.camera.viewPosition, this.lights))
         } else {
             console.warn("No scene objects registered...")
         }

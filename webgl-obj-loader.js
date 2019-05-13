@@ -104,6 +104,9 @@
     unpacked.hashindices = {};
     unpacked.indices = [];
     unpacked.index = 0;
+
+    var areNormalValid = true;
+
     // array of lines separated by the newline
     var lines = objectData.split('\n');
 
@@ -196,9 +199,16 @@
                   unpacked.textures.push(+textures[(vertex[1] - 1) * 2 + 1]);
                 }
                 // Vertex normals
-                unpacked.norms.push(+vertNormals[(vertex[2] - 1) * 3 + 0]);
-                unpacked.norms.push(+vertNormals[(vertex[2] - 1) * 3 + 1]);
-                unpacked.norms.push(+vertNormals[(vertex[2] - 1) * 3 + 2]);
+                if ((vertex[2] - 1) * 3 + 2 < vertNormals.length) {
+                    unpacked.norms.push(+vertNormals[(vertex[2] - 1) * 3 + 0]);
+                    unpacked.norms.push(+vertNormals[(vertex[2] - 1) * 3 + 1]);
+                    unpacked.norms.push(+vertNormals[(vertex[2] - 1) * 3 + 2]);
+                } else {
+                    unpacked.norms.push(vec3.fromValues(0,0,1))
+                    unpacked.norms.push(vec3.fromValues(0,0,1))
+                    unpacked.norms.push(vec3.fromValues(0,0,1))
+                    areNormalValid = false
+                }
                 // add the newly created Vertex to the list of indices
                 unpacked.hashindices[elements[j]] = unpacked.index;
                 unpacked.indices.push(unpacked.index);
@@ -212,10 +222,12 @@
         }
       }
     }
+
     this.vertices = unpacked.verts;
     this.vertexNormals = unpacked.norms;
     this.textures = unpacked.textures;
     this.indices = unpacked.indices;
+    this.areNormalValid = areNormalValid;
   }
 
   /**
@@ -443,5 +455,35 @@
     gl.deleteBuffer(mesh.textureBuffer);
     gl.deleteBuffer(mesh.vertexBuffer);
     gl.deleteBuffer(mesh.indexBuffer);
+  }
+
+  OBJ.generateNormals = function(mesh) {
+      const triangleCount = mesh.indices.length / 3
+      for (var triIndex = 0; triIndex < triangleCount; ++triIndex) {
+          const vertIndex   = triIndex * 3;
+          var triangleVertices = [vec3.fromValues(mesh.vertices[mesh.indices[vertIndex]],
+                                                  mesh.vertices[mesh.indices[vertIndex]+1],
+                                                  mesh.vertices[mesh.indices[vertIndex]+2]),
+                                  vec3.fromValues(mesh.vertices[mesh.indices[vertIndex+1]],
+                                                  mesh.vertices[mesh.indices[vertIndex+1]+1],
+                                                  mesh.vertices[mesh.indices[vertIndex+1]+2]),
+                                  vec3.fromValues(mesh.vertices[mesh.indices[vertIndex+2]],
+                                                  mesh.vertices[mesh.indices[vertIndex+2]+1],
+                                                  mesh.vertices[mesh.indices[vertIndex+2]+2])]
+
+          var d01 = vec3.create()
+          var d02 = vec3.create()
+          vec3.subtract(d01, triangleVertices[1], triangleVertices[0])
+          vec3.subtract(d02, triangleVertices[2], triangleVertices[0])
+          var triangleNormal = vec3.create()
+          vec3.cross(triangleNormal, d01, d02)
+          vec3.normalize(triangleNormal, triangleNormal)
+          if (vertIndex + 2 < mesh.vertexNormals.length) {
+              mesh.vertexNormals[vertIndex] = triangleNormal[0]
+              mesh.vertexNormals[vertIndex+1] = triangleNormal[1]
+              mesh.vertexNormals[vertIndex+2] = triangleNormal[2]
+          }
+      }
+      mesh.areNormalValid = true
   }
 })(this);
