@@ -256,10 +256,7 @@ function initSphereBuffers(gl, radius, subdivisions = 0) {
                                  0.0,  radius,  0.0,
                                 ]
 
-    var sphereVertices = octahedroneVertices // for now
-    const positionBuffer = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
-    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(sphereVertices), gl.STATIC_DRAW);
+    var sphereVertices = octahedroneVertices
 
     const octahedroneIndices = [0,    1,    2,
                                 0,    2,    3,
@@ -270,11 +267,47 @@ function initSphereBuffers(gl, radius, subdivisions = 0) {
                                 3,    5,    4,
                                 4,    5,    1,
                                ]
-    var sphereIndices = octahedroneIndices // for now
+    var sphereIndices = octahedroneIndices
 
     for (var i=0; i<subdivisions; ++i) {
-        
+        var newIndices = [] // start fresh
+        const triCount = sphereIndices.length / 3
+        for (var triIndex = 0; triIndex < triCount; ++triIndex) {
+            const triIndices = [sphereIndices[triIndex*3], sphereIndices[triIndex*3+1], sphereIndices[triIndex*3+2]]
+            var newVertices = []
+            for (var edge = 0; edge < 3; ++edge) {
+                const v1Index = sphereVertices[triIndices[edge]]
+                const v1 = vec3.fromValues(sphereVertices[v1Index],
+                                           sphereVertices[v1Index+1],
+                                           sphereVertices[v1Index+2])
+                const v2Index = sphereVertices[triIndices[(edge+1)%3]]
+                const v2 = vec3.fromValues(sphereVertices[v2Index],
+                                           sphereVertices[v2Index+1],
+                                           sphereVertices[v2Index+2])
+                var delta = vec3.subtract(vec3.create(), v2, v1)
+                vec3.scale(delta, delta, 0.5)
+                var newVert = vec3.add(vec3.create(), v1, delta)
+                const newVertDir = vec3.normalize(vec3.create(), newVert)
+                vec3.scale(newVert, newVertDir, radius)
+                newVertices = newVertices.concat([newVert[0], newVert[1], newVert[2]])
+            }
+
+            // todo, optimize by checking if those vertices where added already
+            sphereVertices = sphereVertices.concat(newVertices)
+            const newVerticesIndices = [sphereVertices.length-9, sphereVertices.length-6, sphereVertices.length-3]
+            newIndices = newIndices.concat([
+                triIndices[0], newVerticesIndices[2], newVerticesIndices[0], 
+                newVerticesIndices[0], newVerticesIndices[1], triIndices[1], 
+                newVerticesIndices[2], triIndices[2], newVerticesIndices[1], 
+                newVerticesIndices[0], newVerticesIndices[2], newVerticesIndices[1], 
+            ])
+        }
+        sphereIndices = [...newIndices] // copy back
     }
+
+    const positionBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, positionBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(sphereVertices), gl.STATIC_DRAW);
     
     const indicesBuffer = gl.createBuffer();
     gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, indicesBuffer);
@@ -308,10 +341,9 @@ function initSphereBuffers(gl, radius, subdivisions = 0) {
     gl.bindBuffer(gl.ARRAY_BUFFER, colorBuffer);
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(sphereColors), gl.STATIC_DRAW);
 
-
     var bufObject = new ObjectBuffers()
     bufObject.type          = gl.TRIANGLES
-    bufObject.vertexCount   = sphereIndices.length
+    bufObject.vertexCount   = sphereIndices.length,
     bufObject.position      = {buffer: positionBuffer,    comp: 3, type: gl.FLOAT}
     bufObject.normal        = {buffer: normalBuffer,      comp: 4, type: gl.FLOAT}
     bufObject.indices       = {buffer: indicesBuffer,     comp: 3, type: gl.UNSIGNED_SHORT}

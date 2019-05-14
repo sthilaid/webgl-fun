@@ -140,7 +140,7 @@ function main() {
     const planeBuffers  = initPlaneBuffers(gl)
     const cubeBuffers   = initCubeBuffers(gl, 2)
     const catBuffers    = initMeshBuffers(gl, catMeshData)
-    const sphereBuffers = initSphereBuffers(gl, 1.0, 0)
+    const sphereBuffers = initSphereBuffers(gl, 1.0, 1)
 
     const makeRotationUpdate = function(axis, angularSpeed = Math.PI * 0.25) {
         var angle           = 0
