@@ -1,6 +1,6 @@
-// code inspired by:
-// https://developer.mozilla.org/en-US/docs/Web/API/WebGL_API/Tutorial
-// rest is written by David St-Hilaire (https://github.com/sthilaid)
+// code originally inspired by
+//     https://developer.mozilla.org/en-US/docs/Web/API/WebGL_API/Tutorial
+// is written by David St-Hilaire (https://github.com/sthilaid)
 
 function initGL(gl) {
     gl.clearColor(0.0, 0.0, 0.0, 1.0)   // Clear to black, fully opaque
@@ -273,28 +273,36 @@ function initSphereBuffers(gl, radius, subdivisions = 0) {
         var newIndices = [] // start fresh
         const triCount = sphereIndices.length / 3
         for (var triIndex = 0; triIndex < triCount; ++triIndex) {
-            const triIndices = [sphereIndices[triIndex*3], sphereIndices[triIndex*3+1], sphereIndices[triIndex*3+2]]
+            const triIndices = [sphereIndices[triIndex*3],
+                                sphereIndices[triIndex*3+1],
+                                sphereIndices[triIndex*3+2]]
             var newVertices = []
             for (var edge = 0; edge < 3; ++edge) {
-                const v1Index = sphereVertices[triIndices[edge]]
+                const v1Index = triIndices[edge]*3
                 const v1 = vec3.fromValues(sphereVertices[v1Index],
                                            sphereVertices[v1Index+1],
                                            sphereVertices[v1Index+2])
-                const v2Index = sphereVertices[triIndices[(edge+1)%3]]
+                const v2Index = triIndices[(edge+1)%3]*3
                 const v2 = vec3.fromValues(sphereVertices[v2Index],
                                            sphereVertices[v2Index+1],
                                            sphereVertices[v2Index+2])
+                // console.log("triIndex/edgeIndex: "+triIndex+"/"+edge+" triIndices: "+triIndices+" v1Index: "+v1Index+" v2Index: "+v2Index)
                 var delta = vec3.subtract(vec3.create(), v2, v1)
                 vec3.scale(delta, delta, 0.5)
                 var newVert = vec3.add(vec3.create(), v1, delta)
                 const newVertDir = vec3.normalize(vec3.create(), newVert)
                 vec3.scale(newVert, newVertDir, radius)
+                // console.log("triIndex: "+triIndex+" v1: "+v1+" v2: "+v2+" newVert: "+newVert)
+                // console.log("newVert: "+newVert+" <= delta: "+delta+" newVertDir: " +newVertDir)
                 newVertices = newVertices.concat([newVert[0], newVert[1], newVert[2]])
             }
 
             // todo, optimize by checking if those vertices where added already
             sphereVertices = sphereVertices.concat(newVertices)
-            const newVerticesIndices = [sphereVertices.length-9, sphereVertices.length-6, sphereVertices.length-3]
+            const newVertCount = sphereVertices.length / 3
+            const newVerticesIndices = [newVertCount - 3,
+                                        newVertCount - 2,
+                                        newVertCount - 1]
             newIndices = newIndices.concat([
                 triIndices[0], newVerticesIndices[2], newVerticesIndices[0], 
                 newVerticesIndices[0], newVerticesIndices[1], triIndices[1], 
@@ -340,6 +348,37 @@ function initSphereBuffers(gl, radius, subdivisions = 0) {
     const colorBuffer = gl.createBuffer();
     gl.bindBuffer(gl.ARRAY_BUFFER, colorBuffer);
     gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(sphereColors), gl.STATIC_DRAW);
+
+    // console.log("[sphere] vert count: "+sphereVertices.length / 3+" triangle count: "+sphereIndices.length / 3)
+    // console.log("[sphere] ---- vertices ----");
+    // for (var i=0; i<sphereVertices.length; ++i) {
+    //     console.log("sphereVertices["+i+"]: "+sphereVertices[i])
+    // }
+    // console.log("[sphere] ---- indices ----")
+    // for (var i=0; i<sphereIndices.length; i+=3) {
+    //     console.log("sphereIndices["+i+", "+(i+1)+", "+(i+2)+"]: "
+    //                 +sphereIndices[i]+", "
+    //                 +sphereIndices[i+1]+", "
+    //                 +sphereIndices[i+2])
+    // }
+    // console.log("[sphere] ---- triangles ----")
+    // for (var i=0; i<sphereIndices.length / 3; ++i) {
+    //     var index = i * 3
+    //     const v0Index = sphereIndices[index]*3
+    //     const v1Index = sphereIndices[index+1]*3
+    //     const v2Index = sphereIndices[index+2]*3
+    //     console.log("t"+i+"["+v0Index+","+v1Index+","+v2Index+"] "
+    //                 +"("+sphereVertices[v0Index].toFixed(2)+", "
+    //                 + sphereVertices[v0Index+1].toFixed(2)+", "
+    //                 + sphereVertices[v0Index+2].toFixed(2)+") | "
+    //                 +"("+sphereVertices[v1Index].toFixed(2)+", "
+    //                 + sphereVertices[v1Index+1].toFixed(2)+", "
+    //                 + sphereVertices[v1Index+2].toFixed(2)+") | "
+    //                 +"("+sphereVertices[v2Index].toFixed(2)+", "
+    //                 + sphereVertices[v2Index+1].toFixed(2)+", "
+    //                 + sphereVertices[v2Index+2].toFixed(2)+") | "
+    //                )
+    // }
 
     var bufObject = new ObjectBuffers()
     bufObject.type          = gl.TRIANGLES
@@ -617,3 +656,4 @@ class Scene {
         }
     }
 }
+
