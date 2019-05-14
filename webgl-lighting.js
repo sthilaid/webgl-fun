@@ -1,6 +1,4 @@
-// code inspired by:
-// https://developer.mozilla.org/en-US/docs/Web/API/WebGL_API/Tutorial
-// rest is written by David St-Hilaire (https://github.com/sthilaid)
+// written by David St-Hilaire (https://github.com/sthilaid)
 
 function makeLitShader(gl) {
         const vsSource = `#version 300 es
@@ -140,7 +138,7 @@ function main() {
     const planeBuffers  = initPlaneBuffers(gl)
     const cubeBuffers   = initCubeBuffers(gl, 2)
     const catBuffers    = initMeshBuffers(gl, catMeshData)
-    const sphereBuffers = initSphereBuffers(gl, 1.0, 1)
+    const sphereBuffers = initSphereBuffers(gl, 1.0, 3)
 
     const makeRotationUpdate = function(axis, angularSpeed = Math.PI * 0.25) {
         var angle           = 0
