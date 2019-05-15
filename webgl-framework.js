@@ -265,6 +265,7 @@ class SceneObject {
                              sceneLights[i].dir[1],
                              sceneLights[i].dir[2])
                 gl.uniform1i(this.shaderObject.uniformLocations.lights[i].type, sceneLights[i].type)
+                gl.uniform1f(this.shaderObject.uniformLocations.lights[i].r0, sceneLights[i].r0)
             }
         }
 
@@ -284,6 +285,7 @@ class Light {
         this.pos            = vec3.create()
         this.dir            = vec3.create()
         this.type           = type
+        this.r0             = 10.0
         this.updateData()
 
         if (this.type < 0 || this.type > 2) {

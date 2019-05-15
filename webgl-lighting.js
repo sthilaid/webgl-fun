@@ -47,6 +47,7 @@ function makeLitShader(gl) {
         vec3 pos;
         vec3 dir;
         int type; // [0: dir, 1: omni, 2: spot]
+        float r0; // ideal distance (omni, spot)
     };
 
     uniform Light uLights[5];
@@ -57,15 +58,16 @@ function makeLitShader(gl) {
         return vec4(0.1, 0.1, 0.1, 1.0);
     }
 
-    vec4 getLightColor(int type, vec3 deltaFragToLight) {
+    vec4 getLightColor(int type, float r0, vec3 deltaFragToLight) {
         if (type == 0) {
             // --- directional ----
             return vec4(1.0, 1.0, 1.0, 1.0);
         }
         else if (type == 1) {
             // --- omni ----
-            return vec4(1.0, 1.0, 1.0, 1.0);
-            
+            float r = length(deltaFragToLight);
+            float attenuation = r0 * r0 / max(r*r, 1.0);
+            return attenuation * vec4(1.0, 1.0, 1.0, 1.0);
         } else if (type == 2) {
             // --- spot ----
             return vec4(1.0, 1.0, 1.0, 1.0);
@@ -88,7 +90,7 @@ function makeLitShader(gl) {
         for(int i=0; i<uLightCount; ++i) {
             vec3 deltaFragToLight   = uLights[i].pos - vVertexPos.xyz;
             vec3 fragToLight        = normalize(deltaFragToLight).xyz;
-            vec4 lightColor         = getLightColor(uLights[i].type, deltaFragToLight);
+            vec4 lightColor         = getLightColor(uLights[i].type, uLights[i].r0, deltaFragToLight);
             vFragmentColor          += clamp(dot(fragToLight, fragNormal), 0.0, 1.0) * lightColor * fragBaseColor;
             vFragmentColor[3]       = 1.0;
         }
@@ -113,6 +115,7 @@ function makeLitShader(gl) {
         light.pos   = gl.getUniformLocation(shaderProgram, 'uLights['+i+'].pos')
         light.dir   = gl.getUniformLocation(shaderProgram, 'uLights['+i+'].dir')
         light.type  = gl.getUniformLocation(shaderProgram, 'uLights['+i+'].type')
+        light.r0  = gl.getUniformLocation(shaderProgram, 'uLights['+i+'].r0')
         lights = lights.concat(light)
     }
     shaderObject.uniformLocations.lights            = lights
@@ -171,8 +174,15 @@ function main() {
             mat4.targetTo(lightMat, pos, lightTarget, vec3.fromValues(0, 1, 0))
             angle += radialSpeed * dt
         }
+        // return function(lightMat, dt) {
+        //     const pos = vec3.fromValues(amplitude*Math.cos(angle), 5, baseDepth + amplitude*Math.sin(angle))
+        //     mat4.targetTo(lightMat, pos, lightTarget, vec3.fromValues(0, 1, 0))
+        //     angle += radialSpeed * dt
+        // }
+
     }()
-    const light = new Light(lightMat, LightTypes.omni, lightUpdate)
+    var light   = new Light(lightMat, LightTypes.omni, lightUpdate)
+    light.r0    = 15.0
 
     const litShader     = makeLitShader(gl)
 
