@@ -256,6 +256,9 @@ class SceneObject {
             && sceneLights.length > 0) {
             gl.uniform1i(this.shaderObject.uniformLocations.lightCount, sceneLights.length)
             for (var i=0; i < sceneLights.length; ++i) {
+                // console.log("light["+i+"] pos: "+sceneLights[i].pos+" dir: "
+                //             +sceneLights[i].dir+" type: "+sceneLights[i].type
+                //             +" r0: "+sceneLights[i].r0)
                 gl.uniform3f(this.shaderObject.uniformLocations.lights[i].pos,
                              sceneLights[i].pos[0],
                              sceneLights[i].pos[1],
