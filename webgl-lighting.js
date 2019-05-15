@@ -161,17 +161,21 @@ function main() {
         // }
     }()
 
-    const lightTarget   = vec3.fromValues(0, 0, -5)
+    const lightTarget   = vec3.fromValues(0, 0, -15)
     var lightMat        = mat4.create()
     mat4.targetTo(lightMat, vec3.fromValues(0, 10, 10), lightTarget, vec3.fromValues(0, 1, 0))
     const lightUpdate   = function() {
         var angle           = 0.0
-        const amplitude     = 20.0
-        const radialSpeed   = Math.PI * 0.1
+        const amplitude     = 5.0
+        const radialSpeed   = Math.PI * 0.2
         const baseDepth     = -15
+        const height        = 0
+        const up            = vec3.fromValues(0, 1, 0)
         return function(lightMat, dt) {
-            const pos = vec3.fromValues(amplitude*Math.cos(angle), 15, baseDepth + amplitude*Math.sin(angle))
-            mat4.targetTo(lightMat, pos, lightTarget, vec3.fromValues(0, 1, 0))
+            const x = amplitude * Math.cos(angle)
+            const z = baseDepth + amplitude * Math.sin(angle)
+            const pos = vec3.fromValues(x, height, z)
+            mat4.targetTo(lightMat, pos, lightTarget, up)
             angle += radialSpeed * dt
         }
         // return function(lightMat, dt) {
@@ -182,14 +186,14 @@ function main() {
 
     }()
     var light   = new Light(lightMat, LightTypes.omni, lightUpdate)
-    light.r0    = 15.0
+    light.r0    = 10.0
 
     const litShader     = makeLitShader(gl)
 
     const planeBuffers  = WebGLMesh.initPlaneBuffers(gl)
     const cubeBuffers   = WebGLMesh.initCubeBuffers(gl, 3)
     const catBuffers    = WebGLMesh.initMeshBuffers(gl, catMeshData)
-    const sphereBuffers = WebGLMesh.initSphereBuffers(gl, 1.0, 3)
+    const sphereBuffers = WebGLMesh.initSphereBuffers(gl, 1.0, 2)
     const groundPlaneBuffers = WebGLMesh.initPlaneBuffers(gl, 5.0, 5.0, vec4.fromValues(0.8, 0.8, 0.8, 1.0))
     const redWallPlaneBuffers = WebGLMesh.initPlaneBuffers(gl, 5.0, 5.0, vec4.fromValues(1.0, 0.0, 0.0, 1.0))
     const greenWallPlaneBuffers = WebGLMesh.initPlaneBuffers(gl, 5.0, 5.0, vec4.fromValues(0.0, 1.0, 0.0, 1.0))
@@ -247,9 +251,13 @@ function main() {
     mat4.fromRotationTranslationScale(rightPlane.modelToWorld,
                                       quat.setAxisAngle(quat.create(), vec3.fromValues(0,1,0), -Math.PI*0.5),
                                       [5, 0, -15.0], [1.0, 1.0, 1.0])
+
+    const lightSphere = new SceneObject("lightSphere", litShader, sphereBuffers,
+                                        function(so, dt) { lightUpdate(so.modelToWorld, dt) })
     
     const scene = new Scene(new Camera(mat4.create(), projectionMatrix, cameraUpdate),
-                            [groundPlane, backPlane, leftPlane, rightPlane, sphere, cube],
+                            [groundPlane, backPlane, leftPlane, rightPlane,
+                             sphere, cube, lightSphere],
                             [light])
     var then = 0;
     function render(now) {
