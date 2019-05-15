@@ -100,9 +100,9 @@ function main() {
     const simpleShader  = makeSimpleShader(gl)
     const textureShader = makeTexturedShader(gl)
 
-    const planeBuffers  = initPlaneBuffers(gl)
-    const cubeBuffers   = initCubeBuffers(gl)
-    const catBuffers    = initMeshBuffers(gl, catMeshData)
+    const planeBuffers  = WebGLMesh.initPlaneBuffers(gl)
+    const cubeBuffers   = WebGLMesh.initCubeBuffers(gl)
+    const catBuffers    = WebGLMesh.initMeshBuffers(gl, catMeshData)
 
     const makeRotationUpdate = function(axis, angularSpeed = Math.PI * 0.25) {
         var angle           = 0

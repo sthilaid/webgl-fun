@@ -133,52 +133,6 @@ function main() {
 
     initGL(gl);
 
-    const litShader     = makeLitShader(gl)
-
-    const planeBuffers  = initPlaneBuffers(gl)
-    const cubeBuffers   = initCubeBuffers(gl, 2)
-    const catBuffers    = initMeshBuffers(gl, catMeshData)
-    const sphereBuffers = initSphereBuffers(gl, 1.0, 3)
-
-    const makeRotationUpdate = function(axis, angularSpeed = Math.PI * 0.25) {
-        var angle           = 0
-        return function(sceneObj, dt) {
-            deltaAngle  = angularSpeed * dt
-            var rot     = mat4.create()
-            mat4.rotate(sceneObj.modelToWorld,
-                        sceneObj.modelToWorld,
-                        deltaAngle,
-                        axis)
-        }
-    }
-
-    const sunRotAxis = vec3.normalize(vec3.create(), [1,0,1])
-    const sunSquare = new SceneObject("sunSquare", litShader, planeBuffers, makeRotationUpdate(sunRotAxis, Math.PI * 0.05))
-    sunSquare.texture = loadTexture(gl, "sun.jpg")
-    mat4.fromRotationTranslationScale(sunSquare.modelToWorld, quat.create(),
-                                      [-0.0, 0.0, -6.0], [1,1,1])
-
-    const smallSquareRotAxis = vec3.normalize(vec3.create(), [0,1,-1])
-    const smallSquare = new SceneObject("smallSquare", litShader, planeBuffers, makeRotationUpdate(smallSquareRotAxis, Math.PI * 0.1))
-    mat4.fromRotationTranslationScale(smallSquare.modelToWorld, quat.create(),
-                                      [0.5, -0.3, -3.0], [0.25, 0.25, 1])
-
-    const cube = new SceneObject("cube", litShader, cubeBuffers, makeRotationUpdate(vec3.normalize(vec3.create(), [1,1,-1]),
-                                                                               Math.PI * 0.15))
-    mat4.fromRotationTranslationScale(cube.modelToWorld, quat.create(),
-                                      [-2.0, -1.0, -10.0], [1, 1, 1])
-
-    const cat = new SceneObject("cat", litShader, catBuffers, makeRotationUpdate(vec3.normalize(vec3.create(), [0,1,0]),
-                                                                             Math.PI * 0.1))
-    mat4.fromRotationTranslationScale(cat.modelToWorld, quat.create(),
-                                      [4, -4, -10.0], [0.01, 0.01, 0.01])
-
-    const sphereRotAxis = vec3.normalize(vec3.create(), vec3.fromValues(1, 1, 1))
-    const sphere = new SceneObject("sphere", litShader, sphereBuffers, makeRotationUpdate(sphereRotAxis,
-                                                                                          Math.PI * 0.1))
-    mat4.fromRotationTranslationScale(sphere.modelToWorld, quat.create(),
-                                      [3, 2, -8.0], [1,1,1])
-
     const fieldOfView = 45 * Math.PI / 180;   // in radians
     const aspect = gl.canvas.clientWidth / gl.canvas.clientHeight;
     const zNear = 1.0;
@@ -209,21 +163,83 @@ function main() {
     mat4.targetTo(lightMat, vec3.fromValues(0, 10, 10), lightTarget, vec3.fromValues(0, 1, 0))
     const lightUpdate   = function() {
         var angle           = 0.0
-        const amplitude     = 10.0
-        const radialSpeed   = Math.PI * 0.25
+        const amplitude     = 20.0
+        const radialSpeed   = Math.PI * 0.1
+        const baseDepth     = -15
         return function(lightMat, dt) {
-            // const pos = vec3.fromValues(amplitude*Math.cos(angle), 10, amplitude*Math.sin(angle))
-            // mat4.targetTo(lightMat, pos, lightTarget, vec3.fromValues(0, 1, 0))
-            // // var test = vec3.create()
-            // // mat4.getTranslation(test, lightMat)
-            // // console.log("pos: "+pos+" test: "+test)
-            // angle += radialSpeed * dt
+            const pos = vec3.fromValues(amplitude*Math.cos(angle), 15, baseDepth + amplitude*Math.sin(angle))
+            mat4.targetTo(lightMat, pos, lightTarget, vec3.fromValues(0, 1, 0))
+            angle += radialSpeed * dt
         }
     }()
     const light = new Light(lightMat, LightTypes.omni, lightUpdate)
 
+    const litShader     = makeLitShader(gl)
+
+    const planeBuffers  = WebGLMesh.initPlaneBuffers(gl)
+    const cubeBuffers   = WebGLMesh.initCubeBuffers(gl, 3)
+    const catBuffers    = WebGLMesh.initMeshBuffers(gl, catMeshData)
+    const sphereBuffers = WebGLMesh.initSphereBuffers(gl, 1.0, 3)
+    const groundPlaneBuffers = WebGLMesh.initPlaneBuffers(gl, 5.0, 5.0, vec4.fromValues(0.8, 0.8, 0.8, 1.0))
+    const redWallPlaneBuffers = WebGLMesh.initPlaneBuffers(gl, 5.0, 5.0, vec4.fromValues(1.0, 0.0, 0.0, 1.0))
+    const greenWallPlaneBuffers = WebGLMesh.initPlaneBuffers(gl, 5.0, 5.0, vec4.fromValues(0.0, 1.0, 0.0, 1.0))
+    const blueWallPlaneBuffers = WebGLMesh.initPlaneBuffers(gl, 5.0, 5.0, vec4.fromValues(0.0, 0.0, 1.0, 1.0))
+
+    const makeRotationUpdate = function(axis, angularSpeed = Math.PI * 0.25) {
+        var angle           = 0
+        return function(sceneObj, dt) {
+            deltaAngle  = angularSpeed * dt
+            var rot     = mat4.create()
+            mat4.rotate(sceneObj.modelToWorld,
+                        sceneObj.modelToWorld,
+                        deltaAngle,
+                        axis)
+        }
+    }
+
+    // const sunRotAxis = vec3.normalize(vec3.create(), [0,0,1])
+    // const sunSquare = new SceneObject("sunSquare", litShader, planeBuffers, makeRotationUpdate(sunRotAxis, Math.PI * 0.05))
+    // sunSquare.texture = loadTexture(gl, "sun.jpg")
+    // mat4.fromRotationTranslationScale(sunSquare.modelToWorld, quat.create(),
+    //                                   [-0.0, 0.0, -6.0], [1,1,1])
+
+    // const smallSquareRotAxis = vec3.normalize(vec3.create(), [0,1,-1])
+    // const smallSquare = new SceneObject("smallSquare", litShader, planeBuffers, makeRotationUpdate(smallSquareRotAxis, Math.PI * 0.1))
+    // mat4.fromRotationTranslationScale(smallSquare.modelToWorld, quat.create(),
+    //                                   [0.5, -0.3, -3.0], [0.25, 0.25, 1])
+
+    const cube = new SceneObject("cube", litShader, cubeBuffers, function(dt){})
+    mat4.fromRotationTranslationScale(cube.modelToWorld,
+                                      quat.setAxisAngle(quat.create(), vec3.fromValues(0,1,0), -Math.PI*0.25),
+                                      [-2.0, -3, -15.0], [1, 1, 1])
+
+    const sphereRotAxis = vec3.normalize(vec3.create(), vec3.fromValues(1, 1, 1))
+    const sphere = new SceneObject("sphere", litShader, sphereBuffers, makeRotationUpdate(sphereRotAxis,
+                                                                                          Math.PI * 0.1))
+    mat4.fromRotationTranslationScale(sphere.modelToWorld, quat.create(),
+                                      [3, 2, -15.0], [1,1,1])
+
+    const groundPlane = new SceneObject("groundPlane", litShader, groundPlaneBuffers, function(dt){})
+    mat4.fromRotationTranslationScale(groundPlane.modelToWorld,
+                                      quat.setAxisAngle(quat.create(), vec3.fromValues(1,0,0), -Math.PI*0.5),
+                                      [0, -5, -15.0], [1.0, 1.0, 1.0])
+
+    const backPlane = new SceneObject("backPlane", litShader, redWallPlaneBuffers, function(dt){})
+    mat4.fromRotationTranslationScale(backPlane.modelToWorld, quat.create(),
+                                      [0, 0, -20.0], [1.0, 1.0, 1.0])
+
+    const leftPlane = new SceneObject("leftPlane", litShader, greenWallPlaneBuffers, function(dt){})
+    mat4.fromRotationTranslationScale(leftPlane.modelToWorld,
+                                      quat.setAxisAngle(quat.create(), vec3.fromValues(0,1,0), Math.PI*0.5),
+                                      [-5, 0, -15.0], [1.0, 1.0, 1.0])
+
+    const rightPlane = new SceneObject("rightPlane", litShader, blueWallPlaneBuffers, function(dt){})
+    mat4.fromRotationTranslationScale(rightPlane.modelToWorld,
+                                      quat.setAxisAngle(quat.create(), vec3.fromValues(0,1,0), -Math.PI*0.5),
+                                      [5, 0, -15.0], [1.0, 1.0, 1.0])
+    
     const scene = new Scene(new Camera(mat4.create(), projectionMatrix, cameraUpdate),
-                            [smallSquare, sphere, cube, cat, sunSquare],
+                            [groundPlane, backPlane, leftPlane, rightPlane, sphere, cube],
                             [light])
     var then = 0;
     function render(now) {
