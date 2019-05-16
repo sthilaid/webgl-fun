@@ -57,6 +57,16 @@ function makeLitShader(gl) {
         return vec4(0.1, 0.1, 0.1, 1.0);
     }
 
+    float distanceAttenuation(float r0, float r) {
+        float attenuationSqr = r0 / max(r, 0.1);
+        return attenuationSqr * attenuationSqr;
+    }
+    float directionAttenuation(vec3 lightDir, vec3 lightToFragDir, float umbraAngle, float penumbraAngle) {
+        float cosLightDirFragAngle = dot(lightDir, lightToFragDir);
+        float t = clamp((cosLightDirFragAngle - cos(umbraAngle)) / (cos(penumbraAngle) - cos(umbraAngle)), 0.0, 1.0);
+        return t * t;
+    }
+
     vec4 getLightColor(int type, float r0, vec3 deltaFragToLight) {
         if (type == 0) {
             // --- directional ----
@@ -65,11 +75,10 @@ function makeLitShader(gl) {
         else if (type == 1) {
             // --- omni ----
             float r = length(deltaFragToLight);
-            float attenuationSqr = r0 / max(r, 0.1);
-            float attenuation = attenuationSqr * attenuationSqr;
-            return attenuation * vec4(1.0, 1.0, 1.0, 1.0);
+            return distanceAttenuation(r0, r) * vec4(1.0, 1.0, 1.0, 1.0);
         } else if (type == 2) {
             // --- spot ----
+            
             return vec4(1.0, 1.0, 1.0, 1.0);
         }
         return vec4(1.0, 1.0, 1.0, 1.0); // fallback

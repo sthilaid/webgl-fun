@@ -291,7 +291,9 @@ class Light {
         this.pos            = vec3.create()
         this.dir            = vec3.create()
         this.type           = type
-        this.r0             = 10.0
+        this.r0             = 10.0                      // omni/spot only
+        this.umbraAngle     = glMatrix.toRadian(15.0)   // spot only
+        this.penumbraAngle  = glMatrix.toRadian(25.0)   // spot only
         this.updateData()
 
         if (this.type < 0 || this.type > 2) {
