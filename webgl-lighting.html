@@ -20,13 +20,27 @@
         <label>Light Type: </label>
         <select id="lightType">
           <option value="directional">Directional</option>
-          <option value="omni">Omni</option>
+          <option value="omni" selected>Omni</option>
           <option value="spot">Spot</option>
         </select>
       </div>
       <div>
         <label>Light Speed (m/s): </label>
-        <input id="lightSpeed" type="text"/>
+        <input id="lightSpeed" type="number" step="0.1"/>
+      </div>
+      <div>
+        <label>Light Color: </label>
+        <input type="color" id="lightColor" value="#ffffff">
+      </div>
+      <div>
+        <label>Light Ideal Distance (m): </label>
+        <input id="lightR0" type="number" step="0.1"/>
+      </div>
+      <div>
+        <label>Spot penumbra angle (deg): </label>
+        <input id="lightPA" type="number" step="0.1" value="15.0"/>
+        <label>Spot umbra angle (deg): </label>
+        <input id="lightUA" type="number" step="0.1" value="25.0"/>
       </div>
     </div>
 

@@ -45,8 +45,11 @@ function makeLitShader(gl) {
     struct Light {
         vec3 pos;
         vec3 dir;
-        int type; // [0: dir, 1: omni, 2: spot]
-        float r0; // ideal distance (omni, spot)
+        vec3 color;
+        int type;               // [0: dir, 1: omni, 2: spot]
+        float r0;               // ideal distance (omni, spot)
+        float umbraAngle;       // spot
+        float penumbraAngle;    // spot
     };
 
     uniform Light uLights[5];
@@ -67,21 +70,24 @@ function makeLitShader(gl) {
         return t * t;
     }
 
-    vec4 getLightColor(int type, float r0, vec3 deltaFragToLight) {
-        if (type == 0) {
+    vec4 getLightColor(Light light, vec3 deltaFragToLight) {
+        if (light.type == 0) {
             // --- directional ----
-            return vec4(1.0, 1.0, 1.0, 1.0);
+            return vec4(light.color, 1.0);
         }
-        else if (type == 1) {
+        else if (light.type == 1) {
             // --- omni ----
             float r = length(deltaFragToLight);
-            return distanceAttenuation(r0, r) * vec4(1.0, 1.0, 1.0, 1.0);
-        } else if (type == 2) {
+            return distanceAttenuation(light.r0, r) * vec4(light.color, 1.0);
+        } else if (light.type == 2) {
             // --- spot ----
-            
-            return vec4(1.0, 1.0, 1.0, 1.0);
+            float r = length(deltaFragToLight);
+            float distAttenuation   = distanceAttenuation(light.r0, r);
+            vec3 lightToFragDir     = -deltaFragToLight / r;
+            float dirAttenuation    = directionAttenuation(light.dir, lightToFragDir, light.umbraAngle, light.penumbraAngle);
+            return distAttenuation * dirAttenuation * vec4(light.color, 1.0);
         }
-        return vec4(1.0, 1.0, 1.0, 1.0); // fallback
+        return vec4(light.color, 1.0); // fallback
     }
 
     void main() {
@@ -99,7 +105,7 @@ function makeLitShader(gl) {
         for(int i=0; i<uLightCount; ++i) {
             vec3 deltaFragToLight   = uLights[i].pos - vVertexPos.xyz;
             vec3 fragToLight        = normalize(deltaFragToLight).xyz;
-            vec4 lightColor         = getLightColor(uLights[i].type, uLights[i].r0, deltaFragToLight);
+            vec4 lightColor         = getLightColor(uLights[i], deltaFragToLight);
             vFragmentColor          += clamp(dot(fragToLight, fragNormal), 0.0, 1.0) * lightColor * fragBaseColor;
             vFragmentColor[3]       = 1.0;
         }
@@ -121,10 +127,13 @@ function makeLitShader(gl) {
     var lights = []
     for (var i=0; i<5; ++i) {
         var light = new Object()
-        light.pos   = gl.getUniformLocation(shaderProgram, 'uLights['+i+'].pos')
-        light.dir   = gl.getUniformLocation(shaderProgram, 'uLights['+i+'].dir')
-        light.type  = gl.getUniformLocation(shaderProgram, 'uLights['+i+'].type')
-        light.r0  = gl.getUniformLocation(shaderProgram, 'uLights['+i+'].r0')
+        light.pos           = gl.getUniformLocation(shaderProgram, 'uLights['+i+'].pos')
+        light.dir           = gl.getUniformLocation(shaderProgram, 'uLights['+i+'].dir')
+        light.color         = gl.getUniformLocation(shaderProgram, 'uLights['+i+'].color')
+        light.type          = gl.getUniformLocation(shaderProgram, 'uLights['+i+'].type')
+        light.r0            = gl.getUniformLocation(shaderProgram, 'uLights['+i+'].r0')
+        light.umbraAngle    = gl.getUniformLocation(shaderProgram, 'uLights['+i+'].umbraAngle')
+        light.penumbraAngle = gl.getUniformLocation(shaderProgram, 'uLights['+i+'].penumbraAngle')
         lights = lights.concat(light)
     }
     shaderObject.uniformLocations.lights            = lights
@@ -133,6 +142,68 @@ function makeLitShader(gl) {
     return shaderObject
 }
 var test=null
+
+function getLightRadialSpeed() {
+    var input = document.getElementById("lightSpeed")
+    if (input) {
+        if (!input.value) {
+            input.value = Math.PI * 0.2
+        }
+        return input.value
+    } else {
+        return Math.PI * 0.2
+    }
+}
+
+function getLightIdealDistance() {
+    var input = document.getElementById("lightR0")
+    if (input) {
+        if (!input.value) {
+            input.value = 5.0
+        }
+        return input.value
+    } else {
+        return 5.0
+    }
+}
+
+function getLightSpotAngles() {
+    var paInput = document.getElementById("lightPA")
+    var uaInput = document.getElementById("lightUA")
+    var penumbra    = paInput ? glMatrix.toRadian(paInput.value) : 0.0
+    var umbra       = uaInput ? glMatrix.toRadian(uaInput.value) : 0.0
+    return {penumbra: penumbra, umbra: umbra}
+}
+
+function getLightType() {
+    var typeSelect = document.getElementById("lightType")
+    if (typeSelect) {
+        return typeSelect.selectedIndex
+    } else {
+        return LightTypes.omni
+    }
+}
+
+function getLightColor() {
+    function hexToRgb(hex) {
+        // https://stackoverflow.com/questions/5623838/rgb-to-hex-and-hex-to-rgb/5624139
+        var result = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex)
+        return result ? vec3.fromValues(parseInt(result[1], 16) / 256.0,
+                                        parseInt(result[2], 16) / 256.0,
+                                        parseInt(result[3], 16) / 256.0)
+            : vec3.fromValues(1.0, 1.0, 1.0)
+    }
+    
+    var colorPicker = document.getElementById("lightColor")
+    if (colorPicker) {
+        const colorValue = colorPicker.value
+        const color = hexToRgb(colorValue)
+        return color
+    } else {
+        return vec3.fromValues(1.0, 1.0, 1.0)
+    }
+}
+
 
 function main() {
     const canvas = document.querySelector('#glcanvas');
@@ -171,27 +242,32 @@ function main() {
     }()
 
     const lightTarget   = vec3.fromValues(0, -5, -15)
-    var lightMat        = mat4.create()
-    mat4.targetTo(lightMat, vec3.fromValues(0, 0, -15), lightTarget, vec3.fromValues(0, 1, 0))
     const lightUpdate   = function() {
         var angle           = 0.0
         const amplitude     = 4.0
-        const radialSpeed   = Math.PI * 0.2
         const baseDepth     = -15
         const height        = 0
         const up            = vec3.fromValues(0, 1, 0)
         // return function(_, __){}
-        return function(lightMat, dt) {
+        return function(light, dt) {
+            const radialSpeed   = getLightRadialSpeed()
             const x = amplitude * Math.cos(angle)
             const z = baseDepth + amplitude * Math.sin(angle)
             const pos = vec3.fromValues(x, height, z)
-            mat4.targetTo(lightMat, pos, lightTarget, up)
+            mat4.targetTo(light.localToWorld, pos, lightTarget, up)
             angle += radialSpeed * dt
+
+            light.r0    = getLightIdealDistance()
+            light.type  = getLightType()
+            light.color = getLightColor()
+
+            const spotAngles = getLightSpotAngles()
+            light.penumbraAngle = spotAngles.penumbra
+            light.umbraAngle    = spotAngles.umbra
         }
 
     }()
-    var light   = new Light(lightMat, LightTypes.omni, lightUpdate)
-    light.r0    = 5.0
+    var light           = new Light(mat4.create(), LightTypes.omni, lightUpdate)
 
     const litShader     = makeLitShader(gl)
 
@@ -260,7 +336,7 @@ function main() {
                                       [5, 0, -15.0], [1.0, 1.0, 1.0])
 
     const lightSphere = new SceneObject("lightSphere", litShader, smallSphereBuffers,
-                                        function(so, dt) { lightUpdate(so.modelToWorld, dt) })
+                                        function(so, dt) { lightUpdate({localToWorld: so.modelToWorld}, dt) })
     
     const scene = new Scene(new Camera(mat4.create(), projectionMatrix, cameraUpdate),
                             [groundPlane, backPlane, leftPlane, rightPlane,

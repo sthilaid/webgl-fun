@@ -270,8 +270,14 @@ class SceneObject {
                              sceneLights[i].dir[0],
                              sceneLights[i].dir[1],
                              sceneLights[i].dir[2])
+                gl.uniform3f(this.shaderObject.uniformLocations.lights[i].color,
+                             sceneLights[i].color[0],
+                             sceneLights[i].color[1],
+                             sceneLights[i].color[2])
                 gl.uniform1i(this.shaderObject.uniformLocations.lights[i].type, sceneLights[i].type)
                 gl.uniform1f(this.shaderObject.uniformLocations.lights[i].r0, sceneLights[i].r0)
+                gl.uniform1f(this.shaderObject.uniformLocations.lights[i].umbraAngle, sceneLights[i].umbraAngle)
+                gl.uniform1f(this.shaderObject.uniformLocations.lights[i].penumbraAngle, sceneLights[i].penumbraAngle)
             }
         }
 
@@ -289,7 +295,8 @@ class Light {
         this.localToWorld   = initMat
         this.updateFn       = updateFn
         this.pos            = vec3.create()
-        this.dir            = vec3.create()
+        this.dir            = vec4.create()
+        this.color          = vec3.fromValues(1.0, 1.0, 1.0)
         this.type           = type
         this.r0             = 10.0                      // omni/spot only
         this.umbraAngle     = glMatrix.toRadian(15.0)   // spot only
@@ -303,13 +310,13 @@ class Light {
 
     update(dt) {
         if (this.updateFn !== false) {
-            this.updateFn(this.localToWorld, dt)
+            this.updateFn(this, dt)
         }
         this.updateData()
     }
 
     updateData() {
-        vec3.transformMat4(this.dir, vec3.fromValues(0,0,1), this.localToWorld)
+        vec4.transformMat4(this.dir, vec4.fromValues(0,0,-1,0), this.localToWorld)
         vec3.normalize(this.dir, this.dir)
         mat4.getTranslation(this.pos, this.localToWorld)
     }
