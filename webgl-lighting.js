@@ -21,8 +21,7 @@ function makeLitShader(gl) {
 
     void main() {
         vVertexPos      = uModelToWorld * aVertexPosition;
-        gl_Position     = normalize(uWorldToProjection * vVertexPos);
-        vVertexPos      = normalize(vVertexPos);
+        gl_Position     = uWorldToProjection * vVertexPos;
         vVertexNormal   = normalize(uModelToWorld * aVertexNormal);
         vTexCoord       = aTexCoord;
         vertexColor     = aVertexColor;
@@ -66,7 +65,8 @@ function makeLitShader(gl) {
         else if (type == 1) {
             // --- omni ----
             float r = length(deltaFragToLight);
-            float attenuation = r0 * r0 / max(r*r, 1.0);
+            float attenuationSqr = r0 / max(r, 0.1);
+            float attenuation = attenuationSqr * attenuationSqr;
             return attenuation * vec4(1.0, 1.0, 1.0, 1.0);
         } else if (type == 2) {
             // --- spot ----
@@ -161,16 +161,17 @@ function main() {
         // }
     }()
 
-    const lightTarget   = vec3.fromValues(0, 0, -15)
+    const lightTarget   = vec3.fromValues(0, -5, -15)
     var lightMat        = mat4.create()
-    mat4.targetTo(lightMat, vec3.fromValues(0, 10, 10), lightTarget, vec3.fromValues(0, 1, 0))
+    mat4.targetTo(lightMat, vec3.fromValues(0, 0, -15), lightTarget, vec3.fromValues(0, 1, 0))
     const lightUpdate   = function() {
         var angle           = 0.0
-        const amplitude     = 5.0
+        const amplitude     = 4.0
         const radialSpeed   = Math.PI * 0.2
         const baseDepth     = -15
         const height        = 0
         const up            = vec3.fromValues(0, 1, 0)
+        // return function(_, __){}
         return function(lightMat, dt) {
             const x = amplitude * Math.cos(angle)
             const z = baseDepth + amplitude * Math.sin(angle)
@@ -178,15 +179,10 @@ function main() {
             mat4.targetTo(lightMat, pos, lightTarget, up)
             angle += radialSpeed * dt
         }
-        // return function(lightMat, dt) {
-        //     const pos = vec3.fromValues(amplitude*Math.cos(angle), 5, baseDepth + amplitude*Math.sin(angle))
-        //     mat4.targetTo(lightMat, pos, lightTarget, vec3.fromValues(0, 1, 0))
-        //     angle += radialSpeed * dt
-        // }
 
     }()
     var light   = new Light(lightMat, LightTypes.omni, lightUpdate)
-    light.r0    = 10.0
+    light.r0    = 5.0
 
     const litShader     = makeLitShader(gl)
 
@@ -194,10 +190,12 @@ function main() {
     const cubeBuffers   = WebGLMesh.initCubeBuffers(gl, 3)
     const catBuffers    = WebGLMesh.initMeshBuffers(gl, catMeshData)
     const sphereBuffers = WebGLMesh.initSphereBuffers(gl, 1.0, 2)
+    const smallSphereBuffers = WebGLMesh.initSphereBuffers(gl, 0.2, 2)
     const groundPlaneBuffers = WebGLMesh.initPlaneBuffers(gl, 5.0, 5.0, vec4.fromValues(0.8, 0.8, 0.8, 1.0))
     const redWallPlaneBuffers = WebGLMesh.initPlaneBuffers(gl, 5.0, 5.0, vec4.fromValues(1.0, 0.0, 0.0, 1.0))
     const greenWallPlaneBuffers = WebGLMesh.initPlaneBuffers(gl, 5.0, 5.0, vec4.fromValues(0.0, 1.0, 0.0, 1.0))
     const blueWallPlaneBuffers = WebGLMesh.initPlaneBuffers(gl, 5.0, 5.0, vec4.fromValues(0.0, 0.0, 1.0, 1.0))
+    loadTexture(gl); // load 1x1 texture to avoid errors in shader
 
     const makeRotationUpdate = function(axis, angularSpeed = Math.PI * 0.25) {
         var angle           = 0
@@ -252,7 +250,7 @@ function main() {
                                       quat.setAxisAngle(quat.create(), vec3.fromValues(0,1,0), -Math.PI*0.5),
                                       [5, 0, -15.0], [1.0, 1.0, 1.0])
 
-    const lightSphere = new SceneObject("lightSphere", litShader, sphereBuffers,
+    const lightSphere = new SceneObject("lightSphere", litShader, smallSphereBuffers,
                                         function(so, dt) { lightUpdate(so.modelToWorld, dt) })
     
     const scene = new Scene(new Camera(mat4.create(), projectionMatrix, cameraUpdate),

@@ -70,7 +70,7 @@ function isPowerOf2(value) {
   return (value & (value - 1)) == 0;
 }
 
-function loadTexture(gl, url) {
+function loadTexture(gl, url="") {
   const texture = gl.createTexture();
   gl.bindTexture(gl.TEXTURE_2D, texture);
 
@@ -90,6 +90,9 @@ function loadTexture(gl, url) {
   gl.texImage2D(gl.TEXTURE_2D, level, internalFormat,
                 width, height, border, srcFormat, srcType,
                 pixel);
+
+  if (url == "")
+      return; // only load 1x1 pixel texture
 
   const image = new Image();
   image.crossOrigin = "Anonymous"
