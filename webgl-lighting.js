@@ -1,5 +1,42 @@
 // written by David St-Hilaire (https://github.com/sthilaid)
 
+function makeUnlitShader(gl) {
+    const vsSource = `#version 300 es
+
+    layout(std140, column_major) uniform;
+    
+    in vec4 aVertexPosition;
+    in vec4 aVertexColor;
+    out vec4 vVertexColor;
+
+    uniform mat4 uModelToWorld;
+    uniform mat4 uWorldToProjection;
+
+    void main() {
+        vVertexColor = aVertexColor;
+        gl_Position = uWorldToProjection * uModelToWorld * aVertexPosition;
+    }
+`
+    const fsSource = `#version 300 es
+    precision highp float;
+    layout(std140, column_major) uniform;
+
+    in vec4 vVertexColor;
+    out vec4 vFragmentColor;
+
+    void main() {
+        vFragmentColor = vVertexColor;
+    }
+`
+    const shaderProgram = initShaderProgram(gl, vsSource, fsSource);
+    const shaderObject  = new ShaderObject(shaderProgram)
+    shaderObject.attribLocations.vertexPosition     = gl.getAttribLocation(shaderProgram,  'aVertexPosition')
+    shaderObject.attribLocations.vertexColor        = gl.getAttribLocation(shaderProgram,  'aVertexColor')
+    shaderObject.uniformLocations.worldToProjection = gl.getUniformLocation(shaderProgram, 'uWorldToProjection')
+    shaderObject.uniformLocations.modelToWorld      = gl.getUniformLocation(shaderProgram, 'uModelToWorld')
+    return shaderObject
+}
+
 function makeLitShader(gl) {
         const vsSource = `#version 300 es
 
@@ -269,13 +306,14 @@ function main() {
     }()
     var light           = new Light(mat4.create(), LightTypes.omni, lightUpdate)
 
+    const unlitShader   = makeUnlitShader(gl)
     const litShader     = makeLitShader(gl)
 
     const planeBuffers  = WebGLMesh.initPlaneBuffers(gl)
     const cubeBuffers   = WebGLMesh.initCubeBuffers(gl, 3)
     const catBuffers    = WebGLMesh.initMeshBuffers(gl, catMeshData)
     const sphereBuffers = WebGLMesh.initSphereBuffers(gl, 1.0, 2)
-    const smallSphereBuffers = WebGLMesh.initSphereBuffers(gl, 0.2, 2)
+    const smallSphereBuffers = WebGLMesh.initSphereBuffers(gl, 0.1, 1, vec4.fromValues(1,1,1,1))
     const groundPlaneBuffers = WebGLMesh.initPlaneBuffers(gl, 5.0, 5.0, vec4.fromValues(0.8, 0.8, 0.8, 1.0))
     const redWallPlaneBuffers = WebGLMesh.initPlaneBuffers(gl, 5.0, 5.0, vec4.fromValues(1.0, 0.0, 0.0, 1.0))
     const greenWallPlaneBuffers = WebGLMesh.initPlaneBuffers(gl, 5.0, 5.0, vec4.fromValues(0.0, 1.0, 0.0, 1.0))
@@ -335,7 +373,7 @@ function main() {
                                       quat.setAxisAngle(quat.create(), vec3.fromValues(0,1,0), -Math.PI*0.5),
                                       [5, 0, -15.0], [1.0, 1.0, 1.0])
 
-    const lightSphere = new SceneObject("lightSphere", litShader, smallSphereBuffers,
+    const lightSphere = new SceneObject("lightSphere", unlitShader, smallSphereBuffers,
                                         function(so, dt) { lightUpdate({localToWorld: so.modelToWorld}, dt) })
     
     const scene = new Scene(new Camera(mat4.create(), projectionMatrix, cameraUpdate),

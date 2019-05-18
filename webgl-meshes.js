@@ -127,7 +127,7 @@ class WebGLMesh {
         return bufObject
     }
 
-    static initSphereBuffers(gl, radius, subdivisions = 0) {
+    static initSphereBuffers(gl, radius, subdivisions = 0, color=null) {
         const octahedroneVertices = [0.0, -radius,  0.0,
                                      radius,  0.0,  0.0,
                                      0.0,  0.0,  radius,
@@ -217,14 +217,13 @@ class WebGLMesh {
         gl.bindBuffer(gl.ARRAY_BUFFER, normalBuffer);
         gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(sphereNormals), gl.STATIC_DRAW);
 
-
         var sphereColors = []
         for (var vertIndex=0; vertIndex<vertCount; ++vertIndex) {
-            sphereColors = sphereColors.concat([Math.random(),
-                                                Math.random(),
-                                                Math.random(),
-                                                1.0])
+            const vertColor = color != null ? [color[0], color[1], color[2], color[3]]
+                                            : [Math.random(), Math.random(), Math.random(), 1.0]
+            sphereColors = sphereColors.concat(vertColor)
         }
+
         const colorBuffer = gl.createBuffer();
         gl.bindBuffer(gl.ARRAY_BUFFER, colorBuffer);
         gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(sphereColors), gl.STATIC_DRAW);
