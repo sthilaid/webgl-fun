@@ -1,5 +1,38 @@
 // written by David St-Hilaire (https://github.com/sthilaid)
 
+function makeShadowShader(gl) {
+    const vsSource = `#version 300 es
+
+    layout(std140, column_major) uniform;
+    
+    in vec4 aVertexPosition;
+
+    uniform mat4 uModelToWorld;
+    uniform mat4 uWorldToProjection;
+
+    void main() {
+        gl_Position = uWorldToProjection * uModelToWorld * aVertexPosition;
+    }
+`
+    const fsSource = `#version 300 es
+    precision highp float;
+    layout(std140, column_major) uniform;
+
+    out vec4 fragmentDepthColor;
+
+    void main() {
+        //fragmentDepthColor = vec4(gl_FragCoord.z, gl_FragCoord.z, gl_FragCoord.z, 1.0);
+        fragmentDepthColor = vec4(1.0, 0.0, 0.0, 1.0);
+    }
+`
+    const shaderProgram = initShaderProgram(gl, vsSource, fsSource);
+    const shaderObject  = new ShaderObject(shaderProgram)
+    shaderObject.attribLocations.vertexPosition     = gl.getAttribLocation(shaderProgram,  'aVertexPosition')
+    shaderObject.uniformLocations.worldToProjection = gl.getUniformLocation(shaderProgram, 'uWorldToProjection')
+    shaderObject.uniformLocations.modelToWorld      = gl.getUniformLocation(shaderProgram, 'uModelToWorld')
+    return shaderObject
+}
+
 function makeUnlitShader(gl) {
     const vsSource = `#version 300 es
 
@@ -36,6 +69,42 @@ function makeUnlitShader(gl) {
     shaderObject.uniformLocations.modelToWorld      = gl.getUniformLocation(shaderProgram, 'uModelToWorld')
     return shaderObject
 }
+
+function makeProjSpaceTexturedShader(gl) {
+    const vsSource = `#version 300 es
+
+    layout(std140, column_major) uniform;
+    
+    in vec4 aVertexPosition;
+    in vec2 aUVCoord;
+    out vec2 vUVCoord;
+
+    void main() {
+        vUVCoord = aUVCoord;
+        gl_Position = aVertexPosition; // no projection!
+    }
+`
+    const fsSource = `#version 300 es
+    precision highp float;
+    layout(std140, column_major) uniform;
+
+    in vec2 vUVCoord;
+    out vec4 vFragmentColor;
+
+    uniform sampler2D uTexture;
+
+    void main() {
+        vFragmentColor = texture(uTexture, vUVCoord);
+    }
+`
+    const shaderProgram = initShaderProgram(gl, vsSource, fsSource);
+    const shaderObject  = new ShaderObject(shaderProgram)
+    shaderObject.attribLocations.vertexPosition     = gl.getAttribLocation(shaderProgram,  'aVertexPosition')
+    shaderObject.attribLocations.texCoord           = gl.getAttribLocation(shaderProgram,  'aUVCoord')
+    shaderObject.uniformLocations.texture           = gl.getUniformLocation(shaderProgram, 'uTexture')
+    return shaderObject
+}
+
 
 function makeLitShader(gl) {
         const vsSource = `#version 300 es
@@ -80,13 +149,15 @@ function makeLitShader(gl) {
     uniform sampler2D uTexture;
 
     struct Light {
-        vec3 pos;
-        vec3 dir;
-        vec3 color;
-        int type;               // [0: dir, 1: omni, 2: spot]
-        float r0;               // ideal distance (omni, spot)
-        float umbraAngle;       // spot
-        float penumbraAngle;    // spot
+        mat4        worldToLightProj;
+        sampler2D   shadowMap;
+        vec3        pos;
+        vec3        dir;
+        vec3        color;
+        int         type;           // [0: dir, 1: omni, 2: spot]
+        float       r0;             // ideal distance (omni, spot)
+        float       umbraAngle;     // spot
+        float       penumbraAngle;  // spot
     };
 
     uniform Light uLights[5];
@@ -108,6 +179,12 @@ function makeLitShader(gl) {
     }
 
     vec4 getLightColor(Light light, vec3 deltaFragToLight) {
+        // float shadowIntensity   = 1.0;
+        // vec4 lightProjFragPos   = light.worldToLightProj * vVertexPos;
+        // vec2 shadowMapCoord     = vec2(lightProjFragPos.x * 0.5 + 0.5,
+        //                                lightProjFragPos.y * 0.5 + 0.5);
+        // vec4 shadowMapValue     = texture(light.shadowMap, shadowMapCoord);
+        // return shadowMapValue;
         if (light.type == 0) {
             // --- directional ----
             return vec4(light.color, 1.0);
@@ -164,13 +241,15 @@ function makeLitShader(gl) {
     var lights = []
     for (var i=0; i<5; ++i) {
         var light = new Object()
-        light.pos           = gl.getUniformLocation(shaderProgram, 'uLights['+i+'].pos')
-        light.dir           = gl.getUniformLocation(shaderProgram, 'uLights['+i+'].dir')
-        light.color         = gl.getUniformLocation(shaderProgram, 'uLights['+i+'].color')
-        light.type          = gl.getUniformLocation(shaderProgram, 'uLights['+i+'].type')
-        light.r0            = gl.getUniformLocation(shaderProgram, 'uLights['+i+'].r0')
-        light.umbraAngle    = gl.getUniformLocation(shaderProgram, 'uLights['+i+'].umbraAngle')
-        light.penumbraAngle = gl.getUniformLocation(shaderProgram, 'uLights['+i+'].penumbraAngle')
+        light.worldToLightProj  = gl.getUniformLocation(shaderProgram, 'uLights['+i+'].worldToLightProj')
+        light.shadowMap         = gl.getUniformLocation(shaderProgram, 'uLights['+i+'].shadowMap')
+        light.pos               = gl.getUniformLocation(shaderProgram, 'uLights['+i+'].pos')
+        light.dir               = gl.getUniformLocation(shaderProgram, 'uLights['+i+'].dir')
+        light.color             = gl.getUniformLocation(shaderProgram, 'uLights['+i+'].color')
+        light.type              = gl.getUniformLocation(shaderProgram, 'uLights['+i+'].type')
+        light.r0                = gl.getUniformLocation(shaderProgram, 'uLights['+i+'].r0')
+        light.umbraAngle        = gl.getUniformLocation(shaderProgram, 'uLights['+i+'].umbraAngle')
+        light.penumbraAngle     = gl.getUniformLocation(shaderProgram, 'uLights['+i+'].penumbraAngle')
         lights = lights.concat(light)
     }
     shaderObject.uniformLocations.lights            = lights
@@ -306,18 +385,20 @@ function main() {
     }()
     var light           = new Light(mat4.create(), LightTypes.omni, lightUpdate)
 
-    const unlitShader   = makeUnlitShader(gl)
-    const litShader     = makeLitShader(gl)
+    const shadowsShader         = makeShadowShader(gl)
+    const unlitShader           = makeUnlitShader(gl)
+    const projSpaceTexShader    = makeProjSpaceTexturedShader(gl)
+    const litShader             = makeLitShader(gl)
 
-    const planeBuffers  = WebGLMesh.initPlaneBuffers(gl)
-    const cubeBuffers   = WebGLMesh.initCubeBuffers(gl, 3)
-    const catBuffers    = WebGLMesh.initMeshBuffers(gl, catMeshData)
-    const sphereBuffers = WebGLMesh.initSphereBuffers(gl, 1.0, 2)
-    const smallSphereBuffers = WebGLMesh.initSphereBuffers(gl, 0.1, 1, vec4.fromValues(1,1,1,1))
-    const groundPlaneBuffers = WebGLMesh.initPlaneBuffers(gl, 5.0, 5.0, vec4.fromValues(0.8, 0.8, 0.8, 1.0))
-    const redWallPlaneBuffers = WebGLMesh.initPlaneBuffers(gl, 5.0, 5.0, vec4.fromValues(1.0, 0.0, 0.0, 1.0))
+    const planeBuffers          = WebGLMesh.initPlaneBuffers(gl, 0.5, 0.5)
+    const cubeBuffers           = WebGLMesh.initCubeBuffers(gl, 3)
+    const catBuffers            = WebGLMesh.initMeshBuffers(gl, catMeshData)
+    const sphereBuffers         = WebGLMesh.initSphereBuffers(gl, 1.0, 2)
+    const smallSphereBuffers    = WebGLMesh.initSphereBuffers(gl, 0.1, 1, vec4.fromValues(1,1,1,1))
+    const groundPlaneBuffers    = WebGLMesh.initPlaneBuffers(gl, 5.0, 5.0, vec4.fromValues(0.8, 0.8, 0.8, 1.0))
+    const redWallPlaneBuffers   = WebGLMesh.initPlaneBuffers(gl, 5.0, 5.0, vec4.fromValues(1.0, 0.0, 0.0, 1.0))
     const greenWallPlaneBuffers = WebGLMesh.initPlaneBuffers(gl, 5.0, 5.0, vec4.fromValues(0.0, 1.0, 0.0, 1.0))
-    const blueWallPlaneBuffers = WebGLMesh.initPlaneBuffers(gl, 5.0, 5.0, vec4.fromValues(0.0, 0.0, 1.0, 1.0))
+    const blueWallPlaneBuffers  = WebGLMesh.initPlaneBuffers(gl, 5.0, 5.0, vec4.fromValues(0.0, 0.0, 1.0, 1.0))
     loadTexture(gl); // load 1x1 texture to avoid errors in shader
 
     const makeRotationUpdate = function(axis, angularSpeed = Math.PI * 0.25) {
@@ -331,17 +412,6 @@ function main() {
                         axis)
         }
     }
-
-    // const sunRotAxis = vec3.normalize(vec3.create(), [0,0,1])
-    // const sunSquare = new SceneObject("sunSquare", litShader, planeBuffers, makeRotationUpdate(sunRotAxis, Math.PI * 0.05))
-    // sunSquare.texture = loadTexture(gl, "sun.jpg")
-    // mat4.fromRotationTranslationScale(sunSquare.modelToWorld, quat.create(),
-    //                                   [-0.0, 0.0, -6.0], [1,1,1])
-
-    // const smallSquareRotAxis = vec3.normalize(vec3.create(), [0,1,-1])
-    // const smallSquare = new SceneObject("smallSquare", litShader, planeBuffers, makeRotationUpdate(smallSquareRotAxis, Math.PI * 0.1))
-    // mat4.fromRotationTranslationScale(smallSquare.modelToWorld, quat.create(),
-    //                                   [0.5, -0.3, -3.0], [0.25, 0.25, 1])
 
     const cube = new SceneObject("cube", litShader, cubeBuffers, function(dt){})
     mat4.fromRotationTranslationScale(cube.modelToWorld,
@@ -375,11 +445,18 @@ function main() {
 
     const lightSphere = new SceneObject("lightSphere", unlitShader, smallSphereBuffers,
                                         function(so, dt) { lightUpdate({localToWorld: so.modelToWorld}, dt) })
+
+    const shadowMapViewPlane = new SceneObject("shadowViz", projSpaceTexShader, planeBuffers,
+                                               function(so,dt) {
+                                                   so.texture = light.shadowDepthTexture;
+                                               })
     
     const scene = new Scene(new Camera(mat4.create(), projectionMatrix, cameraUpdate),
-                            [groundPlane, backPlane, leftPlane, rightPlane,
-                             sphere, cube, lightSphere],
-                            [light])
+                            [groundPlane, backPlane, leftPlane, rightPlane, sphere, cube, lightSphere, shadowMapViewPlane],
+                            [light],
+                            shadowsShader)
+    scene.init(gl)
+    
     var then = 0;
     function render(now) {
         now *= 0.001;  // convert to seconds
@@ -387,7 +464,6 @@ function main() {
         then = now;
 
         {
-            gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
             scene.update(deltaTime)
             scene.render(gl)
         }

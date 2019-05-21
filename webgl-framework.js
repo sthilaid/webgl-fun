@@ -2,6 +2,10 @@
 //     https://developer.mozilla.org/en-US/docs/Web/API/WebGL_API/Tutorial
 // is written by David St-Hilaire (https://github.com/sthilaid)
 
+const GLConstants = {
+    shadowDepthTextureSize: 1024,
+}
+
 function initGL(gl) {
     gl.clearColor(0.0, 0.0, 0.0, 1.0)   // Clear to black, fully opaque
 
@@ -143,33 +147,34 @@ class Camera {
 
 class SceneObject {
     constructor(id, programInfo, buffers, updateFn) {
-        this.shaderObject       = programInfo;
-        this.buffers            = buffers;
+        this.id                 = id
+        this.shaderObject       = programInfo
+        this.buffers            = buffers
         this.texture            = false
-        this.updateFn           = updateFn;
-        this.modelToWorld    = mat4.create();
+        this.updateFn           = updateFn
+        this.modelToWorld    = mat4.create()
     }
 
     update(dt) {
         this.updateFn(this, dt)
     }
 
-    render(gl, worldToProjection, viewPosition, sceneLights) {
+    render(gl, shaderObject, worldToProjection, viewPosition, sceneLights=[]) {
         const normalize = false;
         const stride = 0;
         const offset = 0;
 
         // ---- Vertex buffer
-        if (this.shaderObject.attribLocations.vertexPosition !== false) {
+        if (shaderObject.attribLocations.vertexPosition !== false) {
             if (this.buffers.position) {
                 gl.bindBuffer(gl.ARRAY_BUFFER, this.buffers.position.buffer);
-                gl.vertexAttribPointer(this.shaderObject.attribLocations.vertexPosition,
+                gl.vertexAttribPointer(shaderObject.attribLocations.vertexPosition,
                                        this.buffers.position.comp,
                                        this.buffers.position.type,
                                        normalize, stride, offset);
-                gl.enableVertexAttribArray(this.shaderObject.attribLocations.vertexPosition);
+                gl.enableVertexAttribArray(shaderObject.attribLocations.vertexPosition);
             } else {
-                gl.disableVertexAttribArray(this.shaderObject.attribLocations.vertexPosition);
+                gl.disableVertexAttribArray(shaderObject.attribLocations.vertexPosition);
             }
         }
 
@@ -180,104 +185,117 @@ class SceneObject {
         }
 
         // ---- normals
-        if (this.shaderObject.attribLocations.vertexNormal !== false) {
+        if (shaderObject.attribLocations.vertexNormal !== false) {
             if (this.buffers.normal) {
                 gl.bindBuffer(gl.ARRAY_BUFFER, this.buffers.normal.buffer);
-                gl.vertexAttribPointer(this.shaderObject.attribLocations.vertexNormal,
+                gl.vertexAttribPointer(shaderObject.attribLocations.vertexNormal,
                                        this.buffers.normal.comp,
                                        this.buffers.normal.type,
                                        normalize, stride, offset)
-                gl.enableVertexAttribArray(this.shaderObject.attribLocations.vertexNormal);
+                gl.enableVertexAttribArray(shaderObject.attribLocations.vertexNormal);
             } else {
-                gl.disableVertexAttribArray(this.shaderObject.attribLocations.vertexNormal);
+                gl.disableVertexAttribArray(shaderObject.attribLocations.vertexNormal);
             }
         }
 
         // ---- uvs
-        if (this.shaderObject.attribLocations.texCoord !== false) {
+        if (shaderObject.attribLocations.texCoord !== false) {
             if (this.buffers.uvs) {
                 gl.bindBuffer(gl.ARRAY_BUFFER, this.buffers.uvs.buffer);
-                gl.vertexAttribPointer(this.shaderObject.attribLocations.texCoord,
+                gl.vertexAttribPointer(shaderObject.attribLocations.texCoord,
                                        this.buffers.uvs.comp,
                                        this.buffers.uvs.type,
                                        normalize, stride, offset)
-                gl.enableVertexAttribArray(this.shaderObject.attribLocations.texCoord);
+                gl.enableVertexAttribArray(shaderObject.attribLocations.texCoord);
             } else {
-                gl.disableVertexAttribArray(this.shaderObject.attribLocations.texCoord);
+                gl.disableVertexAttribArray(shaderObject.attribLocations.texCoord);
             }
         }
 
         // ---- Color buffer
-        if (this.shaderObject.attribLocations.vertexColor !== false) {
+        if (shaderObject.attribLocations.vertexColor !== false) {
             if (this.buffers.color) {
                 gl.bindBuffer(gl.ARRAY_BUFFER, this.buffers.color.buffer);
-                gl.vertexAttribPointer(this.shaderObject.attribLocations.vertexColor,
+                gl.vertexAttribPointer(shaderObject.attribLocations.vertexColor,
                                        this.buffers.color.comp,
                                        this.buffers.color.type,
                                        normalize, stride, offset)
-                gl.enableVertexAttribArray(this.shaderObject.attribLocations.vertexColor);
+                gl.enableVertexAttribArray(shaderObject.attribLocations.vertexColor);
             } else {
-                gl.disableVertexAttribArray(this.shaderObject.attribLocations.vertexColor);
+                gl.disableVertexAttribArray(shaderObject.attribLocations.vertexColor);
             }
         }
 
         // ---- Shader and uniform inputs
-        gl.useProgram(this.shaderObject.program);
+        gl.useProgram(shaderObject.program);
 
-        gl.uniformMatrix4fv(
-            this.shaderObject.uniformLocations.worldToProjection,
-            false,
-            worldToProjection);
+        if (shaderObject.uniformLocations.worldToProjection !== false) {
+            gl.uniformMatrix4fv(
+                shaderObject.uniformLocations.worldToProjection,
+                false,
+                worldToProjection);
+        }
 
-        gl.uniformMatrix4fv(
-            this.shaderObject.uniformLocations.modelToWorld,
-            false,
-            this.modelToWorld);
+        if (shaderObject.uniformLocations.modelToWorld !== false) {
+            gl.uniformMatrix4fv(
+                shaderObject.uniformLocations.modelToWorld,
+                false,
+                this.modelToWorld);
+        }
 
         const useTexture = this.texture !== false
-        if(this.shaderObject.uniformLocations.useTexture !== false) {
+        if(shaderObject.uniformLocations.useTexture !== false) {
             gl.uniform1i(
-                this.shaderObject.uniformLocations.useTexture,
+                shaderObject.uniformLocations.useTexture,
                 useTexture);
         }
 
-        if (useTexture && this.shaderObject.uniformLocations.texture !== false) {
+        if (useTexture && shaderObject.uniformLocations.texture !== false) {
             gl.activeTexture(gl.TEXTURE0)
             gl.bindTexture(gl.TEXTURE_2D, this.texture)
-            gl.uniform1i(this.shaderObject.uniformLocations.texture, 0)
+            gl.uniform1i(shaderObject.uniformLocations.texture, 0)
         }
 
-        if (this.shaderObject.uniformLocations.viewPosition !== false) {
-            gl.uniform3f(this.shaderObject.uniformLocations.viewPosition,
+        if (shaderObject.uniformLocations.viewPosition !== false) {
+            gl.uniform3f(shaderObject.uniformLocations.viewPosition,
                          viewPosition[0],
                          viewPosition[1],
                          viewPosition[2])
         }
 
-        if (this.shaderObject.uniformLocations.lights !== false
-            && this.shaderObject.uniformLocations.lightCount !== false
+        if (shaderObject.uniformLocations.lights !== false
+            && shaderObject.uniformLocations.lightCount !== false
             && sceneLights.length > 0) {
-            gl.uniform1i(this.shaderObject.uniformLocations.lightCount, sceneLights.length)
+            gl.uniform1i(shaderObject.uniformLocations.lightCount, sceneLights.length)
             for (var i=0; i < sceneLights.length; ++i) {
                 // console.log("light["+i+"] pos: "+sceneLights[i].pos+" dir: "
                 //             +sceneLights[i].dir+" type: "+sceneLights[i].type
                 //             +" r0: "+sceneLights[i].r0)
-                gl.uniform3f(this.shaderObject.uniformLocations.lights[i].pos,
+                gl.uniformMatrix4fv(shaderObject.uniformLocations.lights[i].worldToLightProj,
+                                    false,
+                                    sceneLights[i].worldToProjection)
+
+                // shadow map texture using texture slots 10+
+                gl.activeTexture(gl.TEXTURE10+i)
+                gl.bindTexture(gl.TEXTURE_2D, sceneLights[i].shadowDepthTexture)
+                gl.uniform1i(shaderObject.uniformLocations.texture, 10+i)
+
+                gl.uniform3f(shaderObject.uniformLocations.lights[i].pos,
                              sceneLights[i].pos[0],
                              sceneLights[i].pos[1],
                              sceneLights[i].pos[2])
-                gl.uniform3f(this.shaderObject.uniformLocations.lights[i].dir,
+                gl.uniform3f(shaderObject.uniformLocations.lights[i].dir,
                              sceneLights[i].dir[0],
                              sceneLights[i].dir[1],
                              sceneLights[i].dir[2])
-                gl.uniform3f(this.shaderObject.uniformLocations.lights[i].color,
+                gl.uniform3f(shaderObject.uniformLocations.lights[i].color,
                              sceneLights[i].color[0],
                              sceneLights[i].color[1],
                              sceneLights[i].color[2])
-                gl.uniform1i(this.shaderObject.uniformLocations.lights[i].type, sceneLights[i].type)
-                gl.uniform1f(this.shaderObject.uniformLocations.lights[i].r0, sceneLights[i].r0)
-                gl.uniform1f(this.shaderObject.uniformLocations.lights[i].umbraAngle, sceneLights[i].umbraAngle)
-                gl.uniform1f(this.shaderObject.uniformLocations.lights[i].penumbraAngle, sceneLights[i].penumbraAngle)
+                gl.uniform1i(shaderObject.uniformLocations.lights[i].type, sceneLights[i].type)
+                gl.uniform1f(shaderObject.uniformLocations.lights[i].r0, sceneLights[i].r0)
+                gl.uniform1f(shaderObject.uniformLocations.lights[i].umbraAngle, sceneLights[i].umbraAngle)
+                gl.uniform1f(shaderObject.uniformLocations.lights[i].penumbraAngle, sceneLights[i].penumbraAngle)
             }
         }
 
@@ -301,11 +319,41 @@ class Light {
         this.r0             = 10.0                      // omni/spot only
         this.umbraAngle     = glMatrix.toRadian(15.0)   // spot only
         this.penumbraAngle  = glMatrix.toRadian(25.0)   // spot only
+        this.shadowFramebuffer  = null
+        this.renderBuffer       = null
+        this.shadowDepthTexture = null
+        this.localToProjection  = mat4.ortho(mat4.create(), -20, 20, -20, 20, 0.01, 100) // tbd...
+        this.worldToProjection  = mat4.create()
         this.updateData()
 
         if (this.type < 0 || this.type > 2) {
             alert('Invalid light type: '+this.type)
         }
+    }
+
+    init(gl) {
+        this.shadowFramebuffer = gl.createFramebuffer()
+        gl.bindFramebuffer(gl.FRAMEBUFFER, this.shadowFramebuffer)
+
+        this.shadowDepthTexture = gl.createTexture()
+        gl.bindTexture(gl.TEXTURE_2D, this.shadowDepthTexture)
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST)
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA,
+                      GLConstants.shadowDepthTextureSize, GLConstants.shadowDepthTextureSize,
+                      0, gl.RGBA, gl.UNSIGNED_BYTE, null)
+
+        this.renderBuffer = gl.createRenderbuffer()
+        gl.bindRenderbuffer(gl.RENDERBUFFER, this.renderBuffer)
+        gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT16,
+                               GLConstants.shadowDepthTextureSize, GLConstants.shadowDepthTextureSize)
+
+        gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.shadowDepthTexture, 0)
+        gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, this.renderBuffer)
+
+        gl.bindTexture(gl.TEXTURE_2D, null)
+        gl.bindRenderbuffer(gl.RENDERBUFFER, null)
+        gl.bindFramebuffer(gl.FRAMEBUFFER, null)
     }
 
     update(dt) {
@@ -319,14 +367,18 @@ class Light {
         vec4.transformMat4(this.dir, vec4.fromValues(0,0,-1,0), this.localToWorld)
         vec3.normalize(this.dir, this.dir)
         mat4.getTranslation(this.pos, this.localToWorld)
+
+        const worldToLocal     = mat4.invert(mat4.create(), this.localToWorld)
+        this.worldToProjection = mat4.multiply(mat4.create(), this.localToProjection, worldToLocal)
     }
 }
 
 class Scene {
-    constructor(camera, objects, lights=[]) {
+    constructor(camera, objects, lights=[], shadowShader=null) {
         this.camera         = camera
         this.objects        = objects
         this.lights         = lights
+        this.shadowShader   = shadowShader
 
         if (!(camera instanceof Camera)) {
             console.error("no Camera instance defined in scene")
@@ -335,6 +387,10 @@ class Scene {
         if (!(objects instanceof Array)) {
             console.error("no objects defined in scene")
         } 
+    }
+
+    init(gl) {
+        this.lights.forEach(l => l.init(gl))
     }
 
     update(dt) {
@@ -355,13 +411,41 @@ class Scene {
         }
     }
 
-    render(gl) {
+    renderShadows(gl) {
+        if (this.lights == false || this.shadowShader == null)
+            return
+
+        const thisScene = this
+        this.lights.forEach(function(light) {
+            gl.useProgram(thisScene.shadowShader.program)
+            gl.bindFramebuffer(gl.FRAMEBUFFER, thisScene.shadowFramebuffer)
+            gl.viewport(0, 0, GLConstants.shadowDepthTextureSize, GLConstants.shadowDepthTextureSize)
+            gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
+
+            if (thisScene.objects !== false) {
+                thisScene.objects.forEach(obj => obj.render(gl, thisScene.shadowShader, light.worldToProjection, light.pos))
+            }
+
+            gl.bindFramebuffer(gl.FRAMEBUFFER, null)
+        })
+    }
+
+    renderScene(gl) {
+        gl.viewport(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight)
+        gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
+        
         if (this.objects !== false) {
             const viewPosition = this.camera.matrix
-            this.objects.forEach(obj => obj.render(gl, this.camera.worldToProjection, this.camera.viewPosition, this.lights))
+            this.objects.forEach(obj => obj.render(gl, obj.shaderObject, this.camera.worldToProjection,
+                                                   this.camera.viewPosition, this.lights))
         } else {
             console.warn("No scene objects registered...")
         }
+    }
+
+    render(gl) {
+        this.renderShadows(gl)
+        this.renderScene(gl)
     }
 }
 
