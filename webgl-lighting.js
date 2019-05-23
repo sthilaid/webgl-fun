@@ -21,8 +21,8 @@ function makeShadowShader(gl) {
     out vec4 fragmentDepthColor;
 
     void main() {
-        //fragmentDepthColor = vec4(gl_FragCoord.z, gl_FragCoord.z, gl_FragCoord.z, 1.0);
-        fragmentDepthColor = vec4(1.0, 0.0, 0.0, 1.0);
+        fragmentDepthColor = vec4(gl_FragCoord.z, gl_FragCoord.z, gl_FragCoord.z, 1.0);
+        //fragmentDepthColor = vec4(1.0, 0.0, 0.0, 1.0);
     }
 `
     const shaderProgram = initShaderProgram(gl, vsSource, fsSource);
@@ -179,29 +179,32 @@ function makeLitShader(gl) {
     }
 
     vec4 getLightColor(Light light, vec3 deltaFragToLight) {
-        // float shadowIntensity   = 1.0;
-        // vec4 lightProjFragPos   = light.worldToLightProj * vVertexPos;
-        // vec2 shadowMapCoord     = vec2(lightProjFragPos.x * 0.5 + 0.5,
-        //                                lightProjFragPos.y * 0.5 + 0.5);
-        // vec4 shadowMapValue     = texture(light.shadowMap, shadowMapCoord);
-        // return shadowMapValue;
+        float shadowIntensity   = 1.0;
+        vec4 lightProjFragPos   = light.worldToLightProj * vVertexPos;
+        vec2 shadowMapCoord     = vec2(lightProjFragPos.x * 0.5 + 0.5,
+                                       lightProjFragPos.y * 0.5 + 0.5);
+        vec4 shadowMapValue     = texture(light.shadowMap, shadowMapCoord);
+        if (lightProjFragPos.z > shadowMapValue.x) {
+            shadowIntensity = 0.1;
+        }
         if (light.type == 0) {
             // --- directional ----
-            return vec4(light.color, 1.0);
+            return shadowIntensity * vec4(light.color, 1.0);
         }
         else if (light.type == 1) {
             // --- omni ----
             float r = length(deltaFragToLight);
-            return distanceAttenuation(light.r0, r) * vec4(light.color, 1.0);
+            return shadowIntensity * distanceAttenuation(light.r0, r) * vec4(light.color, 1.0);
+            //return vec4(shadowIntensity, shadowIntensity, shadowIntensity, 1.0);
         } else if (light.type == 2) {
             // --- spot ----
             float r = length(deltaFragToLight);
             float distAttenuation   = distanceAttenuation(light.r0, r);
             vec3 lightToFragDir     = -deltaFragToLight / r;
             float dirAttenuation    = directionAttenuation(light.dir, lightToFragDir, light.umbraAngle, light.penumbraAngle);
-            return distAttenuation * dirAttenuation * vec4(light.color, 1.0);
+            return shadowIntensity * distAttenuation * dirAttenuation * vec4(light.color, 1.0);
         }
-        return vec4(light.color, 1.0); // fallback
+        return shadowIntensity * vec4(light.color, 1.0); // fallback
     }
 
     void main() {
@@ -297,6 +300,15 @@ function getLightType() {
         return typeSelect.selectedIndex
     } else {
         return LightTypes.omni
+    }
+}
+
+function getShouldShowShadowMap() {
+    var typeSelect = document.getElementById("shadowMapView")
+    if (typeSelect) {
+        return typeSelect.value
+    } else {
+        return false
     }
 }
 
@@ -448,11 +460,11 @@ function main() {
 
     const shadowMapViewPlane = new SceneObject("shadowViz", projSpaceTexShader, planeBuffers,
                                                function(so,dt) {
-                                                   so.texture = light.shadowDepthTexture;
+                                                   //so.texture = light.shadowDepthTexture;
                                                })
     
     const scene = new Scene(new Camera(mat4.create(), projectionMatrix, cameraUpdate),
-                            [groundPlane, backPlane, leftPlane, rightPlane, sphere, cube, lightSphere, shadowMapViewPlane],
+                            [groundPlane, backPlane, leftPlane, rightPlane, sphere, cube, lightSphere /*, shadowMapViewPlane*/],
                             [light],
                             shadowsShader)
     scene.init(gl)

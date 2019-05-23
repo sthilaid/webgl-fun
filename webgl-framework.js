@@ -254,6 +254,7 @@ class SceneObject {
             gl.activeTexture(gl.TEXTURE0)
             gl.bindTexture(gl.TEXTURE_2D, this.texture)
             gl.uniform1i(shaderObject.uniformLocations.texture, 0)
+            //gl.bindTexture(gl.TEXTURE_2D, null) // ??
         }
 
         if (shaderObject.uniformLocations.viewPosition !== false) {
@@ -320,7 +321,6 @@ class Light {
         this.umbraAngle     = glMatrix.toRadian(15.0)   // spot only
         this.penumbraAngle  = glMatrix.toRadian(25.0)   // spot only
         this.shadowFramebuffer  = null
-        this.renderBuffer       = null
         this.shadowDepthTexture = null
         this.localToProjection  = mat4.ortho(mat4.create(), -20, 20, -20, 20, 0.01, 100) // tbd...
         this.worldToProjection  = mat4.create()
@@ -335,24 +335,25 @@ class Light {
         this.shadowFramebuffer = gl.createFramebuffer()
         gl.bindFramebuffer(gl.FRAMEBUFFER, this.shadowFramebuffer)
 
+        const texSize = GLConstants.shadowDepthTextureSize
         this.shadowDepthTexture = gl.createTexture()
         gl.bindTexture(gl.TEXTURE_2D, this.shadowDepthTexture)
+        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, texSize, texSize, 0, gl.RGB, gl.UNSIGNED_BYTE, null)
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST)
-        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA,
-                      GLConstants.shadowDepthTextureSize, GLConstants.shadowDepthTextureSize,
-                      0, gl.RGBA, gl.UNSIGNED_BYTE, null)
-
-        this.renderBuffer = gl.createRenderbuffer()
-        gl.bindRenderbuffer(gl.RENDERBUFFER, this.renderBuffer)
-        gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT16,
-                               GLConstants.shadowDepthTextureSize, GLConstants.shadowDepthTextureSize)
-
-        gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.shadowDepthTexture, 0)
-        gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, this.renderBuffer)
-
         gl.bindTexture(gl.TEXTURE_2D, null)
+        gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.shadowDepthTexture, 0)
+
+        const renderBuffer = gl.createRenderbuffer()
+        gl.bindRenderbuffer(gl.RENDERBUFFER, renderBuffer)
+        gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH24_STENCIL8, texSize, texSize); 
         gl.bindRenderbuffer(gl.RENDERBUFFER, null)
+        gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_STENCIL_ATTACHMENT, gl.RENDERBUFFER, renderBuffer)
+
+        const fboStatus = gl.checkFramebufferStatus(gl.FRAMEBUFFER)
+        if (fboStatus !== gl.FRAMEBUFFER_COMPLETE)
+            console.error("shadow fboStatus: "+fboStatus+" glError: "+gl.getError())
+        
         gl.bindFramebuffer(gl.FRAMEBUFFER, null)
     }
 
@@ -418,13 +419,18 @@ class Scene {
         const thisScene = this
         this.lights.forEach(function(light) {
             gl.useProgram(thisScene.shadowShader.program)
-            gl.bindFramebuffer(gl.FRAMEBUFFER, thisScene.shadowFramebuffer)
+            gl.bindFramebuffer(gl.FRAMEBUFFER, light.shadowFramebuffer)
+            gl.bindTexture(gl.TEXTURE_2D, light.shadowDepthTexture)
             gl.viewport(0, 0, GLConstants.shadowDepthTextureSize, GLConstants.shadowDepthTextureSize)
             gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
 
             if (thisScene.objects !== false) {
                 thisScene.objects.forEach(obj => obj.render(gl, thisScene.shadowShader, light.worldToProjection, light.pos))
             }
+            // const texSize = 1024
+            // var pixels = new Uint8Array(texSize * texSize * 3);
+            // gl.readPixels(0, 0, texSize, texSize, gl.RGB, gl.UNSIGNED_BYTE, pixels);
+            // console.log(pixels); // Uint8Array
 
             gl.bindFramebuffer(gl.FRAMEBUFFER, null)
         })
