@@ -146,20 +146,27 @@ class Camera {
 }
 
 class SceneObject {
-    constructor(id, programInfo, buffers, updateFn) {
+    constructor(id, programInfo, buffers, updateFn, castShadows=true) {
         this.id                 = id
         this.shaderObject       = programInfo
         this.buffers            = buffers
         this.texture            = false
         this.updateFn           = updateFn
-        this.modelToWorld    = mat4.create()
+        this.modelToWorld       = mat4.create()
+        this.isActive           = true
+        this.castShadows        = castShadows
     }
 
     update(dt) {
+        if (!this.isActive)
+            return
         this.updateFn(this, dt)
     }
 
     render(gl, shaderObject, worldToProjection, viewPosition, sceneLights=[]) {
+        if (!this.isActive)
+            return
+        
         const normalize = false;
         const stride = 0;
         const offset = 0;
@@ -425,13 +432,11 @@ class Scene {
             gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
 
             if (thisScene.objects !== false) {
-                thisScene.objects.forEach(obj => obj.render(gl, thisScene.shadowShader, light.worldToProjection, light.pos))
+                thisScene.objects.forEach(obj => {
+                    if (obj.castShadows)
+                        obj.render(gl, thisScene.shadowShader, light.worldToProjection, light.pos)
+                })
             }
-            // const texSize = 1024
-            // var pixels = new Uint8Array(texSize * texSize * 3);
-            // gl.readPixels(0, 0, texSize, texSize, gl.RGB, gl.UNSIGNED_BYTE, pixels);
-            // console.log(pixels); // Uint8Array
-
             gl.bindFramebuffer(gl.FRAMEBUFFER, null)
         })
     }

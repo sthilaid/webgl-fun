@@ -183,8 +183,10 @@ function makeLitShader(gl) {
         vec4 lightProjFragPos   = light.worldToLightProj * vVertexPos;
         vec2 shadowMapCoord     = vec2(lightProjFragPos.x * 0.5 + 0.5,
                                        lightProjFragPos.y * 0.5 + 0.5);
-        vec4 shadowMapValue     = texture(light.shadowMap, shadowMapCoord);
-        if (lightProjFragPos.z > shadowMapValue.x) {
+        float shadowMapDepthValue   = texture(light.shadowMap, shadowMapCoord).r;
+        float currentDepthValue     = lightProjFragPos.z * 0.5 + 0.5;
+        float bias                  = 0.01;
+        if (sign(currentDepthValue) == sign(shadowMapDepthValue) && (abs(currentDepthValue) - bias) > abs(shadowMapDepthValue)) {
             shadowIntensity = 0.1;
         }
         if (light.type == 0) {
@@ -257,11 +259,10 @@ function makeLitShader(gl) {
     }
     shaderObject.uniformLocations.lights            = lights
     shaderObject.uniformLocations.lightCount        = gl.getUniformLocation(shaderProgram,      'uLightCount')
-    test = shaderObject
     return shaderObject
 }
-var test=null
 
+var gLight=null
 function getLightRadialSpeed() {
     var input = document.getElementById("lightSpeed")
     if (input) {
@@ -330,6 +331,14 @@ function getLightColor() {
     } else {
         return vec3.fromValues(1.0, 1.0, 1.0)
     }
+}
+
+var gShadowMapViewPlane = null
+function toggleShapwMapView(isActive) {
+    if (gShadowMapViewPlane == null)
+        return
+
+    gShadowMapViewPlane.isActive = isActive
 }
 
 
@@ -402,7 +411,7 @@ function main() {
     const projSpaceTexShader    = makeProjSpaceTexturedShader(gl)
     const litShader             = makeLitShader(gl)
 
-    const planeBuffers          = WebGLMesh.initPlaneBuffers(gl, 0.5, 0.5)
+    const planeBuffers          = WebGLMesh.initPlaneBuffers(gl, 1, 1)
     const cubeBuffers           = WebGLMesh.initCubeBuffers(gl, 3)
     const catBuffers            = WebGLMesh.initMeshBuffers(gl, catMeshData)
     const sphereBuffers         = WebGLMesh.initSphereBuffers(gl, 1.0, 2)
@@ -458,13 +467,15 @@ function main() {
     const lightSphere = new SceneObject("lightSphere", unlitShader, smallSphereBuffers,
                                         function(so, dt) { lightUpdate({localToWorld: so.modelToWorld}, dt) })
 
-    const shadowMapViewPlane = new SceneObject("shadowViz", projSpaceTexShader, planeBuffers,
-                                               function(so,dt) {
-                                                   //so.texture = light.shadowDepthTexture;
-                                               })
+    gShadowMapViewPlane = new SceneObject("shadowViz", projSpaceTexShader, planeBuffers,
+                                          function(so,dt) {
+                                              so.texture = light.shadowDepthTexture;
+                                          })
+    gShadowMapViewPlane.isActive = false
+    gShadowMapViewPlane.castShadows = false
     
     const scene = new Scene(new Camera(mat4.create(), projectionMatrix, cameraUpdate),
-                            [groundPlane, backPlane, leftPlane, rightPlane, sphere, cube, lightSphere /*, shadowMapViewPlane*/],
+                            [groundPlane, backPlane, leftPlane, rightPlane, sphere, cube, lightSphere, gShadowMapViewPlane],
                             [light],
                             shadowsShader)
     scene.init(gl)
