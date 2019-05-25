@@ -377,7 +377,8 @@ class Light {
         mat4.getTranslation(this.pos, this.localToWorld)
 
         const worldToLocal     = mat4.invert(mat4.create(), this.localToWorld)
-        this.worldToProjection = mat4.multiply(mat4.create(), this.localToProjection, worldToLocal)
+        //this.worldToProjection = mat4.multiply(mat4.create(), this.localToProjection, worldToLocal)
+        this.worldToProjection = worldToLocal
     }
 }
 

@@ -11,7 +11,21 @@ function makeShadowShader(gl) {
     uniform mat4 uWorldToProjection;
 
     void main() {
-        gl_Position = uWorldToProjection * uModelToWorld * aVertexPosition;
+        float eps = 0.00001;
+        vec4 pos = uWorldToProjection * uModelToWorld * aVertexPosition;
+
+        float thetaXY = 0.0;
+        if (pos.x > eps || pos.y > eps) {
+            vec4 posXY = vec4(pos.x, pos.y, 0.0, 0.0);
+            thetaXY = dot(vec4(1,0,0,0), posXY);
+        }
+        float thetaXZ = 0.0;
+        if (pos.x > eps || pos.z > eps) {
+            vec4 posXZ = vec4(pos.x, 0.0, pos.z, 0.0);
+            thetaXZ = dot(vec4(1,0,0,0), posXZ);
+        }
+        float depth = length(pos) / 30.0;
+        gl_Position = vec4(thetaXY, thetaXZ, depth, 1.0);
     }
 `
     const fsSource = `#version 300 es
@@ -22,7 +36,6 @@ function makeShadowShader(gl) {
 
     void main() {
         fragmentDepthColor = vec4(gl_FragCoord.z, gl_FragCoord.z, gl_FragCoord.z, 1.0);
-        //fragmentDepthColor = vec4(1.0, 0.0, 0.0, 1.0);
     }
 `
     const shaderProgram = initShaderProgram(gl, vsSource, fsSource);
