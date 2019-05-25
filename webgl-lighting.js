@@ -437,7 +437,7 @@ function main() {
     const cube = new SceneObject("cube", litShader, cubeBuffers, function(dt){})
     mat4.fromRotationTranslationScale(cube.modelToWorld,
                                       quat.setAxisAngle(quat.create(), vec3.fromValues(0,1,0), -Math.PI*0.25),
-                                      [-2.0, -3, -15.0], [1, 1, 1])
+                                      [-2.0, -3.5, -15.0], [1, 1, 1])
 
     const sphereRotAxis = vec3.normalize(vec3.create(), vec3.fromValues(1, 1, 1))
     const sphere = new SceneObject("sphere", litShader, sphereBuffers, makeRotationUpdate(sphereRotAxis,

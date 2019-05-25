@@ -329,7 +329,7 @@ class Light {
         this.penumbraAngle  = glMatrix.toRadian(25.0)   // spot only
         this.shadowFramebuffer  = null
         this.shadowDepthTexture = null
-        this.localToProjection  = mat4.ortho(mat4.create(), -20, 20, -20, 20, 0.01, 100) // tbd...
+        this.localToProjection  = mat4.ortho(mat4.create(), -20, 20, -20, 20, 0.1, 20) // tbd...
         this.worldToProjection  = mat4.create()
         this.updateData()
 
