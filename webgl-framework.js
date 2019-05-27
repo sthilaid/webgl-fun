@@ -3,12 +3,10 @@
 // is written by David St-Hilaire (https://github.com/sthilaid)
 
 const GLConstants = {
-    shadowDepthTextureSize: 1024,
+    shadowDepthTextureSize: 256,
 }
 
 function initGL(gl) {
-    gl.clearColor(0.0, 0.0, 0.0, 1.0)   // Clear to black, fully opaque
-
     gl.enable(gl.DEPTH_TEST)            // Enable depth testing
     gl.clearDepth(1.0)
     gl.depthFunc(gl.LESS)               // smaller z is closer
@@ -271,6 +269,10 @@ class SceneObject {
                          viewPosition[2])
         }
 
+        if (shaderObject.uniformLocations.castShadows !== false) {
+            gl.uniform1ui(shaderObject.uniformLocations.castShadows, this.castShadows)
+        }
+
         if (shaderObject.uniformLocations.lights !== false
             && shaderObject.uniformLocations.lightCount !== false
             && sceneLights.length > 0) {
@@ -351,11 +353,11 @@ class Light {
         gl.bindTexture(gl.TEXTURE_2D, null)
         gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.shadowDepthTexture, 0)
 
-        const renderBuffer = gl.createRenderbuffer()
-        gl.bindRenderbuffer(gl.RENDERBUFFER, renderBuffer)
-        gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH24_STENCIL8, texSize, texSize); 
-        gl.bindRenderbuffer(gl.RENDERBUFFER, null)
-        gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_STENCIL_ATTACHMENT, gl.RENDERBUFFER, renderBuffer)
+        // const renderBuffer = gl.createRenderbuffer()
+        // gl.bindRenderbuffer(gl.RENDERBUFFER, renderBuffer)
+        // gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH24_STENCIL8, texSize, texSize); 
+        // gl.bindRenderbuffer(gl.RENDERBUFFER, null)
+        // gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_STENCIL_ATTACHMENT, gl.RENDERBUFFER, renderBuffer)
 
         const fboStatus = gl.checkFramebufferStatus(gl.FRAMEBUFFER)
         if (fboStatus !== gl.FRAMEBUFFER_COMPLETE)
@@ -430,6 +432,7 @@ class Scene {
             gl.bindFramebuffer(gl.FRAMEBUFFER, light.shadowFramebuffer)
             gl.bindTexture(gl.TEXTURE_2D, light.shadowDepthTexture)
             gl.viewport(0, 0, GLConstants.shadowDepthTextureSize, GLConstants.shadowDepthTextureSize)
+            gl.clearColor(1.0, 1.0, 1.0, 1.0)   // Clear to depth texture to white, no light occluders
             gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
 
             if (thisScene.objects !== false) {
@@ -444,6 +447,7 @@ class Scene {
 
     renderScene(gl) {
         gl.viewport(0, 0, gl.drawingBufferWidth, gl.drawingBufferHeight)
+        gl.clearColor(0.0, 0.0, 0.0, 1.0)   // Clear to black, fully opaque
         gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
         
         if (this.objects !== false) {

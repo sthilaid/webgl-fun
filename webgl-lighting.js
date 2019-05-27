@@ -2,7 +2,6 @@
 
 function makeShadowShader(gl) {
     const vsSource = `#version 300 es
-
     layout(std140, column_major) uniform;
     
     in vec4 aVertexPosition;
@@ -10,32 +9,35 @@ function makeShadowShader(gl) {
     uniform mat4 uModelToWorld;
     uniform mat4 uWorldToProjection;
 
-    void main() {
-        float eps = 0.00001;
-        vec4 pos = uWorldToProjection * uModelToWorld * aVertexPosition;
-
+    vec4 getSphericalDepthProjection(vec4 localPos) {
+        float eps = 0.001;
         float thetaXY = 0.0;
-        if (pos.x > eps || pos.y > eps) {
-            vec4 posXY = vec4(pos.x, pos.y, 0.0, 0.0);
-            thetaXY = dot(vec4(1,0,0,0), posXY);
+        if (abs(localPos.x) > eps || abs(localPos.y) > eps) {
+            vec3 localPosXY = normalize(vec3(localPos.x, localPos.y, 0.0));
+            thetaXY = dot(vec3(1,0,0), localPosXY);
         }
         float thetaXZ = 0.0;
-        if (pos.x > eps || pos.z > eps) {
-            vec4 posXZ = vec4(pos.x, 0.0, pos.z, 0.0);
-            thetaXZ = dot(vec4(1,0,0,0), posXZ);
+        if (abs(localPos.x) > eps || abs(localPos.z) > eps) {
+            vec3 localPosXZ = normalize(vec3(localPos.x, 0.0, localPos.z));
+            thetaXZ = dot(vec3(1,0,0), localPosXZ);
         }
-        float depth = length(pos) / 30.0;
-        gl_Position = vec4(thetaXY, thetaXZ, depth, 1.0);
+        float depth = length(localPos) / 5.0;
+        return vec4(thetaXY, thetaXZ, depth, 1.0);
+    }
+
+    void main() {
+        vec4 pos = uWorldToProjection * uModelToWorld * aVertexPosition;
+        gl_Position = getSphericalDepthProjection(pos);
     }
 `
     const fsSource = `#version 300 es
     precision highp float;
     layout(std140, column_major) uniform;
 
-    out vec4 fragmentDepthColor;
+    out vec4 fFragmentDepthColor;
 
     void main() {
-        fragmentDepthColor = vec4(gl_FragCoord.z, gl_FragCoord.z, gl_FragCoord.z, 1.0);
+        fFragmentDepthColor = vec4(vec3(gl_FragCoord.z), 1.0);
     }
 `
     const shaderProgram = initShaderProgram(gl, vsSource, fsSource);
@@ -176,6 +178,7 @@ function makeLitShader(gl) {
     uniform Light uLights[5];
     uniform int uLightCount;
     uniform vec3 uViewPosition;
+    uniform bool uCastShadows;
 
     vec4 unlit(vec3 n, vec3 v) {
         return vec4(0.1, 0.1, 0.1, 1.0);
@@ -191,16 +194,35 @@ function makeLitShader(gl) {
         return t * t;
     }
 
+    vec4 getSphericalDepthProjection(vec4 localPos) {
+        float eps = 0.00001;
+        float thetaXY = 0.0;
+        if (abs(localPos.x) > eps || abs(localPos.y) > eps) {
+            vec3 localPosXY = normalize(vec3(localPos.x, localPos.y, 0.0));
+            thetaXY = dot(vec3(1,0,0), localPosXY);
+        }
+        float thetaXZ = 0.0;
+        if (abs(localPos.x) > eps || abs(localPos.z) > eps) {
+            vec3 localPosXZ = normalize(vec3(localPos.x, 0.0, localPos.z));
+            thetaXZ = dot(vec3(1,0,0), localPosXZ);
+        }
+        float depth = length(localPos) / 5.0;
+        return vec4(thetaXY, thetaXZ, depth, 1.0);
+    }
+
     vec4 getLightColor(Light light, vec3 deltaFragToLight) {
         float shadowIntensity   = 1.0;
-        vec4 lightProjFragPos   = light.worldToLightProj * vVertexPos;
-        vec2 shadowMapCoord     = vec2(lightProjFragPos.x * 0.5 + 0.5,
-                                       lightProjFragPos.y * 0.5 + 0.5);
-        float shadowMapDepthValue   = texture(light.shadowMap, shadowMapCoord).r;
-        float currentDepthValue     = lightProjFragPos.z * 0.5 + 0.5;
-        float bias                  = 0.01;
-        if (sign(currentDepthValue) == sign(shadowMapDepthValue) && (abs(currentDepthValue) - bias) > abs(shadowMapDepthValue)) {
-            shadowIntensity = 0.1;
+        vec4 localLightPos      = light.worldToLightProj * vVertexPos;
+        vec4 lightProj          = getSphericalDepthProjection(localLightPos);
+        vec2 shadowMapCoord     = vec2(lightProj.x * 0.5 + 0.5,
+                                       lightProj.y * 0.5 + 0.5);
+        float shadowMapDepthValue   = texture(light.shadowMap, shadowMapCoord).z;
+        float currentDepthValue     = min(lightProj.z, 1.0);
+        float bias                  = 0.0;
+        bool isInShadow = (currentDepthValue - bias) > shadowMapDepthValue;
+        if (isInShadow) {
+            shadowIntensity = 0.1; // if further from light, fragment lies in shadow
+            //return vec4(vec3(shadowMapDepthValue), 1.0);
         }
         if (light.type == 0) {
             // --- directional ----
@@ -239,6 +261,7 @@ function makeLitShader(gl) {
             vec3 fragToLight        = normalize(deltaFragToLight).xyz;
             vec4 lightColor         = getLightColor(uLights[i], deltaFragToLight);
             vFragmentColor          += clamp(dot(fragToLight, fragNormal), 0.0, 1.0) * lightColor * fragBaseColor;
+            //vFragmentColor          = lightColor;
             vFragmentColor[3]       = 1.0;
         }
     }
@@ -255,6 +278,7 @@ function makeLitShader(gl) {
     shaderObject.uniformLocations.useTexture        = gl.getUniformLocation(shaderProgram, 'uUseTexture')
     shaderObject.uniformLocations.texture           = gl.getUniformLocation(shaderProgram, 'uTexture')
     shaderObject.uniformLocations.viewPosition      = gl.getUniformLocation(shaderProgram, 'uViewPosition')
+    shaderObject.uniformLocations.castShadows       = gl.getUniformLocation(shaderProgram, 'uCastShadows')
 
     var lights = []
     for (var i=0; i<5; ++i) {
@@ -271,7 +295,8 @@ function makeLitShader(gl) {
         lights = lights.concat(light)
     }
     shaderObject.uniformLocations.lights            = lights
-    shaderObject.uniformLocations.lightCount        = gl.getUniformLocation(shaderProgram,      'uLightCount')
+    shaderObject.uniformLocations.lightCount        = gl.getUniformLocation(shaderProgram, 'uLightCount')
+
     return shaderObject
 }
 
@@ -396,7 +421,7 @@ function main() {
         var angle           = 0.0
         const amplitude     = 4.0
         const baseDepth     = -15
-        const height        = 0
+        const height        = 5.0
         const up            = vec3.fromValues(0, 1, 0)
         // return function(_, __){}
         return function(light, dt) {
@@ -404,7 +429,9 @@ function main() {
             const x = amplitude * Math.cos(angle)
             const z = baseDepth + amplitude * Math.sin(angle)
             const pos = vec3.fromValues(x, height, z)
-            mat4.targetTo(light.localToWorld, pos, lightTarget, up)
+            //mat4.targetTo(light.localToWorld, pos, lightTarget, up)
+            mat4.identity(light.localToWorld)
+            mat4.translate(light.localToWorld, light.localToWorld, pos)
             angle += radialSpeed * dt
 
             light.r0    = getLightIdealDistance()
@@ -450,35 +477,43 @@ function main() {
     const cube = new SceneObject("cube", litShader, cubeBuffers, function(dt){})
     mat4.fromRotationTranslationScale(cube.modelToWorld,
                                       quat.setAxisAngle(quat.create(), vec3.fromValues(0,1,0), -Math.PI*0.25),
-                                      [-2.0, -3.5, -15.0], [1, 1, 1])
+                                      //[-2.0, -3.5, -15.0], [1, 1, 1])
+                                      [-2.0, 1.5, -15.0], [1, 1, 1])
+    cube.castShadows = false
 
     const sphereRotAxis = vec3.normalize(vec3.create(), vec3.fromValues(1, 1, 1))
     const sphere = new SceneObject("sphere", litShader, sphereBuffers, makeRotationUpdate(sphereRotAxis,
                                                                                           Math.PI * 0.1))
     mat4.fromRotationTranslationScale(sphere.modelToWorld, quat.create(),
                                       [3, 2, -15.0], [1,1,1])
+    sphere.castShadows = true
 
     const groundPlane = new SceneObject("groundPlane", litShader, groundPlaneBuffers, function(dt){})
     mat4.fromRotationTranslationScale(groundPlane.modelToWorld,
                                       quat.setAxisAngle(quat.create(), vec3.fromValues(1,0,0), -Math.PI*0.5),
                                       [0, -5, -15.0], [1.0, 1.0, 1.0])
+    groundPlane.castShadows = false
 
     const backPlane = new SceneObject("backPlane", litShader, redWallPlaneBuffers, function(dt){})
     mat4.fromRotationTranslationScale(backPlane.modelToWorld, quat.create(),
                                       [0, 0, -20.0], [1.0, 1.0, 1.0])
+    backPlane.castShadows = false
 
     const leftPlane = new SceneObject("leftPlane", litShader, greenWallPlaneBuffers, function(dt){})
     mat4.fromRotationTranslationScale(leftPlane.modelToWorld,
                                       quat.setAxisAngle(quat.create(), vec3.fromValues(0,1,0), Math.PI*0.5),
                                       [-5, 0, -15.0], [1.0, 1.0, 1.0])
+    leftPlane.castShadows = false
 
     const rightPlane = new SceneObject("rightPlane", litShader, blueWallPlaneBuffers, function(dt){})
     mat4.fromRotationTranslationScale(rightPlane.modelToWorld,
                                       quat.setAxisAngle(quat.create(), vec3.fromValues(0,1,0), -Math.PI*0.5),
                                       [5, 0, -15.0], [1.0, 1.0, 1.0])
+    rightPlane.castShadows = false
 
     const lightSphere = new SceneObject("lightSphere", unlitShader, smallSphereBuffers,
                                         function(so, dt) { lightUpdate({localToWorld: so.modelToWorld}, dt) })
+    lightSphere.castShadows = false
 
     gShadowMapViewPlane = new SceneObject("shadowViz", projSpaceTexShader, planeBuffers,
                                           function(so,dt) {
