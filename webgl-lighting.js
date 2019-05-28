@@ -11,18 +11,22 @@ function makeShadowShader(gl) {
 
     vec4 getSphericalDepthProjection(vec4 localPos) {
         float eps = 0.001;
-        float thetaXY = 0.0;
+        float x = 0.0;
         if (abs(localPos.x) > eps || abs(localPos.y) > eps) {
             vec3 localPosXY = normalize(vec3(localPos.x, localPos.y, 0.0));
-            thetaXY = dot(vec3(1,0,0), localPosXY);
+            float s = sign(localPos.z);
+            float cosThetaXY = dot(vec3(1,0,0), localPosXY);
+            x = s * cosThetaXY * 0.5 + 0.5;
         }
-        float thetaXZ = 0.0;
+        float y = 0.0;
         if (abs(localPos.x) > eps || abs(localPos.z) > eps) {
             vec3 localPosXZ = normalize(vec3(localPos.x, 0.0, localPos.z));
-            thetaXZ = dot(vec3(1,0,0), localPosXZ);
+            float s = sign(localPos.y);
+            float cosThetaXZ = dot(vec3(1,0,0), localPosXZ);
+            y = s * cosThetaXZ * 0.5 + 0.5;
         }
         float depth = length(localPos) / 5.0;
-        return vec4(thetaXY, thetaXZ, depth, 1.0);
+        return vec4(x, y, depth, 1.0);
     }
 
     void main() {
@@ -195,19 +199,23 @@ function makeLitShader(gl) {
     }
 
     vec4 getSphericalDepthProjection(vec4 localPos) {
-        float eps = 0.00001;
-        float thetaXY = 0.0;
+        float eps = 0.001;
+        float x = 0.0;
         if (abs(localPos.x) > eps || abs(localPos.y) > eps) {
             vec3 localPosXY = normalize(vec3(localPos.x, localPos.y, 0.0));
-            thetaXY = dot(vec3(1,0,0), localPosXY);
+            float s = sign(localPos.z);
+            float cosThetaXY = dot(vec3(1,0,0), localPosXY);
+            x = s * cosThetaXY * 0.5 + 0.5;
         }
-        float thetaXZ = 0.0;
+        float y = 0.0;
         if (abs(localPos.x) > eps || abs(localPos.z) > eps) {
             vec3 localPosXZ = normalize(vec3(localPos.x, 0.0, localPos.z));
-            thetaXZ = dot(vec3(1,0,0), localPosXZ);
+            float s = sign(localPos.y);
+            float cosThetaXZ = dot(vec3(1,0,0), localPosXZ);
+            y = s * cosThetaXZ * 0.5 + 0.5;
         }
         float depth = length(localPos) / 5.0;
-        return vec4(thetaXY, thetaXZ, depth, 1.0);
+        return vec4(x, y, depth, 1.0);
     }
 
     vec4 getLightColor(Light light, vec3 deltaFragToLight) {
@@ -421,7 +429,7 @@ function main() {
         var angle           = 0.0
         const amplitude     = 4.0
         const baseDepth     = -15
-        const height        = 5.0
+        const height        = 2.0
         const up            = vec3.fromValues(0, 1, 0)
         // return function(_, __){}
         return function(light, dt) {
@@ -477,8 +485,8 @@ function main() {
     const cube = new SceneObject("cube", litShader, cubeBuffers, function(dt){})
     mat4.fromRotationTranslationScale(cube.modelToWorld,
                                       quat.setAxisAngle(quat.create(), vec3.fromValues(0,1,0), -Math.PI*0.25),
-                                      //[-2.0, -3.5, -15.0], [1, 1, 1])
-                                      [-2.0, 1.5, -15.0], [1, 1, 1])
+                                      [-2.0, -3.5, -15.0], [1, 1, 1])
+                                      //[-2.0, 1.5, -15.0], [1, 1, 1])
     cube.castShadows = false
 
     const sphereRotAxis = vec3.normalize(vec3.create(), vec3.fromValues(1, 1, 1))
