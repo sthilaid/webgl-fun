@@ -3,7 +3,7 @@
 // is written by David St-Hilaire (https://github.com/sthilaid)
 
 const GLConstants = {
-    shadowDepthTextureSize: 256,
+    shadowDepthTextureSize: 2056,
 }
 
 function initGL(gl) {
@@ -350,6 +350,8 @@ class Light {
         gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, texSize, texSize, 0, gl.RGB, gl.UNSIGNED_BYTE, null)
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
         gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST)
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S,     gl.REPEAT)
+        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T,     gl.REPEAT)
         gl.bindTexture(gl.TEXTURE_2D, null)
         gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.shadowDepthTexture, 0)
 

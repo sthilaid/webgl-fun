@@ -12,18 +12,24 @@ function makeShadowShader(gl) {
     vec4 getSphericalDepthProjection(vec4 localPos) {
         float eps = 0.001;
         float x = 0.0;
-        if (abs(localPos.x) > eps || abs(localPos.y) > eps) {
+        bool hasXComponent = abs(localPos.x) > eps;
+        bool hasYComponent = abs(localPos.y) > eps;
+        bool hasZComponent = abs(localPos.z) > eps;
+        if (hasXComponent || hasYComponent) {
             vec3 localPosXY = normalize(vec3(localPos.x, localPos.y, 0.0));
-            float s = sign(localPos.z);
+            vec3 signAxis = hasXComponent ? vec3(1.0, 0.0, 0.0) : vec3(0.0, 1.0, 0.0);
+            float s = sign(cross(signAxis, localPosXY).z);
             float cosThetaXY = dot(vec3(1,0,0), localPosXY);
-            x = s * cosThetaXY * 0.5 + 0.5;
+            x = s * (1.0 - (cosThetaXY * 0.5 + 0.5));
         }
+
         float y = 0.0;
-        if (abs(localPos.x) > eps || abs(localPos.z) > eps) {
+        if (hasXComponent || hasZComponent) {
             vec3 localPosXZ = normalize(vec3(localPos.x, 0.0, localPos.z));
-            float s = sign(localPos.y);
+            vec3 signAxis = hasXComponent ? vec3(1.0, 0.0, 0.0) : vec3(0.0, 0.0, 1.0);
+            float s = sign(cross(signAxis, localPosXZ).y);
             float cosThetaXZ = dot(vec3(1,0,0), localPosXZ);
-            y = s * cosThetaXZ * 0.5 + 0.5;
+            y = s * (1.0 - (cosThetaXZ * 0.5 + 0.5));
         }
         float depth = length(localPos) / 5.0;
         return vec4(x, y, depth, 1.0);
@@ -201,18 +207,24 @@ function makeLitShader(gl) {
     vec4 getSphericalDepthProjection(vec4 localPos) {
         float eps = 0.001;
         float x = 0.0;
-        if (abs(localPos.x) > eps || abs(localPos.y) > eps) {
+        bool hasXComponent = abs(localPos.x) > eps;
+        bool hasYComponent = abs(localPos.y) > eps;
+        bool hasZComponent = abs(localPos.z) > eps;
+        if (hasXComponent || hasYComponent) {
             vec3 localPosXY = normalize(vec3(localPos.x, localPos.y, 0.0));
-            float s = sign(localPos.z);
+            vec3 signAxis = hasXComponent ? vec3(1.0, 0.0, 0.0) : vec3(0.0, 1.0, 0.0);
+            float s = sign(cross(signAxis, localPosXY).z);
             float cosThetaXY = dot(vec3(1,0,0), localPosXY);
-            x = s * cosThetaXY * 0.5 + 0.5;
+            x = s * (1.0 - (cosThetaXY * 0.5 + 0.5));
         }
+
         float y = 0.0;
-        if (abs(localPos.x) > eps || abs(localPos.z) > eps) {
+        if (hasXComponent || hasZComponent) {
             vec3 localPosXZ = normalize(vec3(localPos.x, 0.0, localPos.z));
-            float s = sign(localPos.y);
+            vec3 signAxis = hasXComponent ? vec3(1.0, 0.0, 0.0) : vec3(0.0, 0.0, 1.0);
+            float s = sign(cross(signAxis, localPosXZ).y);
             float cosThetaXZ = dot(vec3(1,0,0), localPosXZ);
-            y = s * cosThetaXZ * 0.5 + 0.5;
+            y = s * (1.0 - (cosThetaXZ * 0.5 + 0.5));
         }
         float depth = length(localPos) / 5.0;
         return vec4(x, y, depth, 1.0);
@@ -462,7 +474,7 @@ function main() {
     const planeBuffers          = WebGLMesh.initPlaneBuffers(gl, 1, 1)
     const cubeBuffers           = WebGLMesh.initCubeBuffers(gl, 3)
     const catBuffers            = WebGLMesh.initMeshBuffers(gl, catMeshData)
-    const sphereBuffers         = WebGLMesh.initSphereBuffers(gl, 1.0, 2)
+    const sphereBuffers         = WebGLMesh.initSphereBuffers(gl, 1.0, 0)
     const smallSphereBuffers    = WebGLMesh.initSphereBuffers(gl, 0.1, 1, vec4.fromValues(1,1,1,1))
     const groundPlaneBuffers    = WebGLMesh.initPlaneBuffers(gl, 5.0, 5.0, vec4.fromValues(0.8, 0.8, 0.8, 1.0))
     const redWallPlaneBuffers   = WebGLMesh.initPlaneBuffers(gl, 5.0, 5.0, vec4.fromValues(1.0, 0.0, 0.0, 1.0))
