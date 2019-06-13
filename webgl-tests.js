@@ -39,6 +39,7 @@ function makeSimpleShader(gl) {
     shaderObject.uniformLocations.worldToProjection = gl.getUniformLocation(shaderProgram, 'uWorldToProjection')
     shaderObject.uniformLocations.modelToWorld      = gl.getUniformLocation(shaderProgram, 'uModelToWorld')
     shaderObject.uniformLocations.texture           = false
+    shaderObject.uniformLocations.castShadows       = false
 
     return shaderObject
 }
@@ -82,6 +83,7 @@ function makeTexturedShader(gl) {
     shaderObject.uniformLocations.worldToProjection = gl.getUniformLocation(shaderProgram, 'uWorldToProjection')
     shaderObject.uniformLocations.modelToWorld      = gl.getUniformLocation(shaderProgram, 'uModelToWorld')
     shaderObject.uniformLocations.texture           = gl.getUniformLocation(shaderProgram, 'uTexture')
+    shaderObject.uniformLocations.castShadows       = false
 
     return shaderObject
 }

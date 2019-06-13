@@ -3,14 +3,16 @@
 function makeShadowShader(gl) {
     const vsSource = `#version 300 es
     layout(std140, column_major) uniform;
+
+    #define eps     0.001
     
     in vec4 aVertexPosition;
 
     uniform mat4 uModelToWorld;
     uniform mat4 uWorldToProjection;
+    uniform int  uShadowPass;
 
     vec4 getSphericalDepthProjection(vec4 localPos) {
-        float eps = 0.001;
         float x = 0.0;
         bool hasXComponent = abs(localPos.x) > eps;
         bool hasYComponent = abs(localPos.y) > eps;
@@ -20,7 +22,14 @@ function makeShadowShader(gl) {
             vec3 signAxis = hasXComponent ? vec3(1.0, 0.0, 0.0) : vec3(0.0, 1.0, 0.0);
             float s = sign(cross(signAxis, localPosXY).z);
             float cosThetaXY = dot(vec3(1,0,0), localPosXY);
-            x = s * (1.0 - (cosThetaXY * 0.5 + 0.5));
+
+            // if not in this pass, flip the intervall and add it just after
+            // this pass so that it blends properly
+            if ((s < 0.0 && uShadowPass == 0) || (s > 0.0 && uShadowPass == 1)) {
+                float flippedCosTheta = -cosThetaXY;
+                cosThetaXY = flippedCosTheta + sign(cosThetaXY) * 2.0;
+            }
+            x = cosThetaXY;
         }
 
         float y = 0.0;
@@ -29,9 +38,16 @@ function makeShadowShader(gl) {
             vec3 signAxis = hasXComponent ? vec3(1.0, 0.0, 0.0) : vec3(0.0, 0.0, 1.0);
             float s = sign(cross(signAxis, localPosXZ).y);
             float cosThetaXZ = dot(vec3(1,0,0), localPosXZ);
-            y = s * (1.0 - (cosThetaXZ * 0.5 + 0.5));
+
+            // if not in this pass, flip the intervall and add it just after
+            // this pass so that it blends properly
+            if ((s < 0.0 && uShadowPass == 0) || (s > 0.0 && uShadowPass == 1)) {
+                float flippedCosTheta = -cosThetaXZ;
+                cosThetaXZ = flippedCosTheta + sign(cosThetaXZ) * 2.0;
+            }
+            y = cosThetaXZ;
         }
-        float depth = length(localPos) / 5.0;
+        float depth = length(localPos) / 10.0;
         return vec4(x, y, depth, 1.0);
     }
 
@@ -55,6 +71,8 @@ function makeShadowShader(gl) {
     shaderObject.attribLocations.vertexPosition     = gl.getAttribLocation(shaderProgram,  'aVertexPosition')
     shaderObject.uniformLocations.worldToProjection = gl.getUniformLocation(shaderProgram, 'uWorldToProjection')
     shaderObject.uniformLocations.modelToWorld      = gl.getUniformLocation(shaderProgram, 'uModelToWorld')
+    shaderObject.uniformLocations.castShadows       = false
+    shaderObject.uniformLocations.shadowPass        = gl.getUniformLocation(shaderProgram, 'uShadowPass')
     return shaderObject
 }
 
@@ -92,6 +110,7 @@ function makeUnlitShader(gl) {
     shaderObject.attribLocations.vertexColor        = gl.getAttribLocation(shaderProgram,  'aVertexColor')
     shaderObject.uniformLocations.worldToProjection = gl.getUniformLocation(shaderProgram, 'uWorldToProjection')
     shaderObject.uniformLocations.modelToWorld      = gl.getUniformLocation(shaderProgram, 'uModelToWorld')
+    shaderObject.uniformLocations.castShadows       = false
     return shaderObject
 }
 
@@ -127,14 +146,19 @@ function makeProjSpaceTexturedShader(gl) {
     shaderObject.attribLocations.vertexPosition     = gl.getAttribLocation(shaderProgram,  'aVertexPosition')
     shaderObject.attribLocations.texCoord           = gl.getAttribLocation(shaderProgram,  'aUVCoord')
     shaderObject.uniformLocations.texture           = gl.getUniformLocation(shaderProgram, 'uTexture')
+    shaderObject.uniformLocations.castShadows       = false
     return shaderObject
 }
 
 
 function makeLitShader(gl) {
         const vsSource = `#version 300 es
-
+    precision highp int;
+    precision highp float;
     layout(std140, column_major) uniform;
+
+    #define MAX_LIGHT_COUNT 5
+    #define eps             0.001
     
     in vec4 aVertexPosition;
     in vec4 aVertexNormal;
@@ -145,28 +169,92 @@ function makeLitShader(gl) {
     out vec4 vVertexNormal;
     out vec2 vTexCoord;
     out vec4 vertexColor;
+    out vec3 vShadowMapCoord[MAX_LIGHT_COUNT];
 
     uniform bool uUseTexture;
     uniform mat4 uModelToWorld;
     uniform mat4 uWorldToProjection;
 
+    struct Light {
+        mat4        worldToLightProj;
+        sampler2D   shadowMap;
+        vec3        pos;
+        vec3        dir;
+        vec3        color;
+        int         type;           // [0: dir, 1: omni, 2: spot]
+        float       r0;             // ideal distance (omni, spot)
+        float       umbraAngle;     // spot
+        float       penumbraAngle;  // spot
+    };
+
+    uniform Light uLights[MAX_LIGHT_COUNT];
+    uniform int uLightCount;
+
+    vec4 getSphericalDepthProjection(vec4 localPos, int shadowPass) {
+        float x = 0.0;
+        bool hasXComponent = abs(localPos.x) > eps;
+        bool hasYComponent = abs(localPos.y) > eps;
+        bool hasZComponent = abs(localPos.z) > eps;
+        if (hasXComponent || hasYComponent) {
+            vec3 localPosXY = normalize(vec3(localPos.x, localPos.y, 0.0));
+            vec3 signAxis = hasXComponent ? vec3(1.0, 0.0, 0.0) : vec3(0.0, 1.0, 0.0);
+            float s = sign(cross(signAxis, localPosXY).z);
+            float cosThetaXY = dot(vec3(1,0,0), localPosXY);
+
+            // if not in this pass, flip the intervall and add it just after
+            // this pass so that it blends properly
+            if ((s < 0.0 && shadowPass == 0) || (s > 0.0 && shadowPass == 1)) {
+                float flippedCosTheta = -cosThetaXY;
+                cosThetaXY = flippedCosTheta + sign(cosThetaXY) * 2.0;
+            }
+            x = cosThetaXY;
+        }
+
+        float y = 0.0;
+        if (hasXComponent || hasZComponent) {
+            vec3 localPosXZ = normalize(vec3(localPos.x, 0.0, localPos.z));
+            vec3 signAxis = hasXComponent ? vec3(1.0, 0.0, 0.0) : vec3(0.0, 0.0, 1.0);
+            float s = sign(cross(signAxis, localPosXZ).y);
+            float cosThetaXZ = dot(vec3(1,0,0), localPosXZ);
+
+            // if not in this pass, flip the intervall and add it just after
+            // this pass so that it blends properly
+            if ((s < 0.0 && shadowPass == 0) || (s > 0.0 && shadowPass == 1)) {
+                float flippedCosTheta = -cosThetaXZ;
+                cosThetaXZ = flippedCosTheta + sign(cosThetaXZ) * 2.0;
+            }
+            y = cosThetaXZ;
+        }
+        float depth = length(localPos) / 10.0;
+        return vec4(x, y, depth, 1.0);
+    }
+    
     void main() {
         vVertexPos      = uModelToWorld * aVertexPosition;
         gl_Position     = uWorldToProjection * vVertexPos;
         vVertexNormal   = normalize(uModelToWorld * aVertexNormal);
         vTexCoord       = aTexCoord;
         vertexColor     = aVertexColor;
+
+        for(int i=0; i<uLightCount; ++i) {
+            vec4 localLightPos  = uLights[i].worldToLightProj * vVertexPos;
+            vShadowMapCoord[i]  = vec3(getSphericalDepthProjection(localLightPos, 0));
+        }
     }
   `;
 
     const fsSource = `#version 300 es
+    precision highp int;
     precision highp float;
     layout(std140, column_major) uniform;
+
+    #define MAX_LIGHT_COUNT 5
     
     in vec4 vVertexPos;
     in vec4 vVertexNormal;
     in vec2 vTexCoord;
     in vec4 vertexColor;
+    in vec3 vShadowMapCoord[MAX_LIGHT_COUNT];
 
     out vec4 vFragmentColor;
 
@@ -185,7 +273,7 @@ function makeLitShader(gl) {
         float       penumbraAngle;  // spot
     };
 
-    uniform Light uLights[5];
+    uniform Light uLights[MAX_LIGHT_COUNT];
     uniform int uLightCount;
     uniform vec3 uViewPosition;
     uniform bool uCastShadows;
@@ -203,47 +291,30 @@ function makeLitShader(gl) {
         float t = clamp((cosLightDirFragAngle - cos(umbraAngle)) / (cos(penumbraAngle) - cos(umbraAngle)), 0.0, 1.0);
         return t * t;
     }
-
-    vec4 getSphericalDepthProjection(vec4 localPos) {
-        float eps = 0.001;
-        float x = 0.0;
-        bool hasXComponent = abs(localPos.x) > eps;
-        bool hasYComponent = abs(localPos.y) > eps;
-        bool hasZComponent = abs(localPos.z) > eps;
-        if (hasXComponent || hasYComponent) {
-            vec3 localPosXY = normalize(vec3(localPos.x, localPos.y, 0.0));
-            vec3 signAxis = hasXComponent ? vec3(1.0, 0.0, 0.0) : vec3(0.0, 1.0, 0.0);
-            float s = sign(cross(signAxis, localPosXY).z);
-            float cosThetaXY = dot(vec3(1,0,0), localPosXY);
-            x = s * (1.0 - (cosThetaXY * 0.5 + 0.5));
-        }
-
-        float y = 0.0;
-        if (hasXComponent || hasZComponent) {
-            vec3 localPosXZ = normalize(vec3(localPos.x, 0.0, localPos.z));
-            vec3 signAxis = hasXComponent ? vec3(1.0, 0.0, 0.0) : vec3(0.0, 0.0, 1.0);
-            float s = sign(cross(signAxis, localPosXZ).y);
-            float cosThetaXZ = dot(vec3(1,0,0), localPosXZ);
-            y = s * (1.0 - (cosThetaXZ * 0.5 + 0.5));
-        }
-        float depth = length(localPos) / 5.0;
-        return vec4(x, y, depth, 1.0);
-    }
-
-    vec4 getLightColor(Light light, vec3 deltaFragToLight) {
+    float getShadowIntensity(Light light, int lightIndex) {
         float shadowIntensity   = 1.0;
         vec4 localLightPos      = light.worldToLightProj * vVertexPos;
-        vec4 lightProj          = getSphericalDepthProjection(localLightPos);
+        vec3 lightProj          = vShadowMapCoord[lightIndex];
         vec2 shadowMapCoord     = vec2(lightProj.x * 0.5 + 0.5,
                                        lightProj.y * 0.5 + 0.5);
+
+        // temp while adding 2nd texture
+        if (abs(shadowMapCoord.x) < 0.0 || abs(shadowMapCoord.x) > 1.0)
+            return 1.0;
+        if (abs(shadowMapCoord.y) < 0.0 || abs(shadowMapCoord.y) > 1.0)
+            return 1.0;
+
         float shadowMapDepthValue   = texture(light.shadowMap, shadowMapCoord).z;
         float currentDepthValue     = min(lightProj.z, 1.0);
         float bias                  = 0.0;
         bool isInShadow = (currentDepthValue - bias) > shadowMapDepthValue;
         if (isInShadow) {
             shadowIntensity = 0.1; // if further from light, fragment lies in shadow
-            //return vec4(vec3(shadowMapDepthValue), 1.0);
         }
+        return shadowIntensity;
+    }
+    vec4 getLightColor(Light light, vec3 deltaFragToLight, int lightIndex) {
+        float shadowIntensity = getShadowIntensity(light, lightIndex);
         if (light.type == 0) {
             // --- directional ----
             return shadowIntensity * vec4(light.color, 1.0);
@@ -279,7 +350,7 @@ function makeLitShader(gl) {
         for(int i=0; i<uLightCount; ++i) {
             vec3 deltaFragToLight   = uLights[i].pos - vVertexPos.xyz;
             vec3 fragToLight        = normalize(deltaFragToLight).xyz;
-            vec4 lightColor         = getLightColor(uLights[i], deltaFragToLight);
+            vec4 lightColor         = getLightColor(uLights[i], deltaFragToLight, i);
             vFragmentColor          += clamp(dot(fragToLight, fragNormal), 0.0, 1.0) * lightColor * fragBaseColor;
             //vFragmentColor          = lightColor;
             vFragmentColor[3]       = 1.0;
@@ -441,7 +512,7 @@ function main() {
         var angle           = 0.0
         const amplitude     = 4.0
         const baseDepth     = -15
-        const height        = 2.0
+        const height        = -2
         const up            = vec3.fromValues(0, 1, 0)
         // return function(_, __){}
         return function(light, dt) {
@@ -477,7 +548,7 @@ function main() {
     const sphereBuffers         = WebGLMesh.initSphereBuffers(gl, 1.0, 0)
     const smallSphereBuffers    = WebGLMesh.initSphereBuffers(gl, 0.1, 1, vec4.fromValues(1,1,1,1))
     const groundPlaneBuffers    = WebGLMesh.initPlaneBuffers(gl, 5.0, 5.0, vec4.fromValues(0.8, 0.8, 0.8, 1.0))
-    const redWallPlaneBuffers   = WebGLMesh.initPlaneBuffers(gl, 5.0, 5.0, vec4.fromValues(1.0, 0.0, 0.0, 1.0))
+    const redWallPlaneBuffers   = WebGLMesh.initPlaneBuffers(gl, 5.0, 10.0, vec4.fromValues(1.0, 0.0, 0.0, 1.0))
     const greenWallPlaneBuffers = WebGLMesh.initPlaneBuffers(gl, 5.0, 5.0, vec4.fromValues(0.0, 1.0, 0.0, 1.0))
     const blueWallPlaneBuffers  = WebGLMesh.initPlaneBuffers(gl, 5.0, 5.0, vec4.fromValues(0.0, 0.0, 1.0, 1.0))
     loadTexture(gl); // load 1x1 texture to avoid errors in shader
@@ -506,7 +577,7 @@ function main() {
                                                                                           Math.PI * 0.1))
     mat4.fromRotationTranslationScale(sphere.modelToWorld, quat.create(),
                                       [3, 2, -15.0], [1,1,1])
-    sphere.castShadows = true
+    sphere.castShadows = false
 
     const groundPlane = new SceneObject("groundPlane", litShader, groundPlaneBuffers, function(dt){})
     mat4.fromRotationTranslationScale(groundPlane.modelToWorld,
@@ -537,13 +608,18 @@ function main() {
 
     gShadowMapViewPlane = new SceneObject("shadowViz", projSpaceTexShader, planeBuffers,
                                           function(so,dt) {
-                                              so.texture = light.shadowDepthTexture;
+                                              so.texture = light.shadowDepthTextures[0];
                                           })
     gShadowMapViewPlane.isActive = false
     gShadowMapViewPlane.castShadows = false
+
+    const testPlane = new SceneObject("testPlane", litShader, planeBuffers, function(so,dt) {})
+    mat4.fromRotationTranslationScale(testPlane.modelToWorld, quat.create(),
+                                      [0, 0, -15.0], [1.0, 1.0, 1.0])
+    gShadowMapViewPlane.castShadows = false
     
     const scene = new Scene(new Camera(mat4.create(), projectionMatrix, cameraUpdate),
-                            [groundPlane, backPlane, leftPlane, rightPlane, sphere, cube, lightSphere, gShadowMapViewPlane],
+                            [groundPlane, backPlane, leftPlane, rightPlane, sphere, cube, lightSphere, gShadowMapViewPlane, testPlane],
                             [light],
                             shadowsShader)
     scene.init(gl)

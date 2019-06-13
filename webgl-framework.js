@@ -18,7 +18,6 @@ function initGL(gl) {
 function initShaderProgram(gl, vsSource, fsSource) {
     function loadShader(gl, type, source, debugTxt="") {
         const shader = gl.createShader(type);
-
         gl.shaderSource(shader, source);
         gl.compileShader(shader);
 
@@ -272,6 +271,10 @@ class SceneObject {
         if (shaderObject.uniformLocations.castShadows !== false) {
             gl.uniform1ui(shaderObject.uniformLocations.castShadows, this.castShadows)
         }
+        
+        if (shaderObject.uniformLocations.shadowPass !== false) {
+            gl.uniform1i(shaderObject.uniformLocations.shadowPass, gShadowPass)
+        }
 
         if (shaderObject.uniformLocations.lights !== false
             && shaderObject.uniformLocations.lightCount !== false
@@ -287,8 +290,12 @@ class SceneObject {
 
                 // shadow map texture using texture slots 10+
                 gl.activeTexture(gl.TEXTURE10+i)
-                gl.bindTexture(gl.TEXTURE_2D, sceneLights[i].shadowDepthTexture)
+                gl.bindTexture(gl.TEXTURE_2D, sceneLights[i].shadowDepthTextures[0])
                 gl.uniform1i(shaderObject.uniformLocations.texture, 10+i)
+
+                gl.activeTexture(gl.TEXTURE20+i)
+                gl.bindTexture(gl.TEXTURE_2D, sceneLights[i].shadowDepthTextures[1])
+                gl.uniform1i(shaderObject.uniformLocations.texture, 20+i)
 
                 gl.uniform3f(shaderObject.uniformLocations.lights[i].pos,
                              sceneLights[i].pos[0],
@@ -329,8 +336,8 @@ class Light {
         this.r0             = 10.0                      // omni/spot only
         this.umbraAngle     = glMatrix.toRadian(15.0)   // spot only
         this.penumbraAngle  = glMatrix.toRadian(25.0)   // spot only
-        this.shadowFramebuffer  = null
-        this.shadowDepthTexture = null
+        this.shadowFramebuffers = [null, null]
+        this.shadowDepthTextures= [null, null]
         this.localToProjection  = mat4.ortho(mat4.create(), -20, 20, -20, 20, 0.1, 20) // tbd...
         this.worldToProjection  = mat4.create()
         this.updateData()
@@ -341,19 +348,25 @@ class Light {
     }
 
     init(gl) {
-        this.shadowFramebuffer = gl.createFramebuffer()
-        gl.bindFramebuffer(gl.FRAMEBUFFER, this.shadowFramebuffer)
-
         const texSize = GLConstants.shadowDepthTextureSize
-        this.shadowDepthTexture = gl.createTexture()
-        gl.bindTexture(gl.TEXTURE_2D, this.shadowDepthTexture)
-        gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, texSize, texSize, 0, gl.RGB, gl.UNSIGNED_BYTE, null)
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST)
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S,     gl.REPEAT)
-        gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T,     gl.REPEAT)
-        gl.bindTexture(gl.TEXTURE_2D, null)
-        gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, this.shadowDepthTexture, 0)
+
+        for (var i=0; i<2; ++i)
+        {
+            this.shadowFramebuffers[i] = gl.createFramebuffer()
+            gl.bindFramebuffer(gl.FRAMEBUFFER, this.shadowFramebuffers[i])
+
+            this.shadowDepthTextures[i] = gl.createTexture()
+            gl.bindTexture(gl.TEXTURE_2D, this.shadowDepthTextures[i])
+            gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, texSize, texSize, 0, gl.RGB, gl.UNSIGNED_BYTE, null)
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST)
+            gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST)
+            // gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S,     gl.REPEAT)
+            // gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T,     gl.REPEAT)
+            gl.bindTexture(gl.TEXTURE_2D, null)
+            gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D,
+                                    this.shadowDepthTextures[i], 0)
+
+        }
 
         // const renderBuffer = gl.createRenderbuffer()
         // gl.bindRenderbuffer(gl.RENDERBUFFER, renderBuffer)
@@ -386,6 +399,7 @@ class Light {
     }
 }
 
+var gShadowPass = 0
 class Scene {
     constructor(camera, objects, lights=[], shadowShader=null) {
         this.camera         = camera
@@ -428,20 +442,34 @@ class Scene {
         if (this.lights == false || this.shadowShader == null)
             return
 
+        gl.viewport(0, 0, GLConstants.shadowDepthTextureSize, GLConstants.shadowDepthTextureSize)
+        
         const thisScene = this
         this.lights.forEach(function(light) {
             gl.useProgram(thisScene.shadowShader.program)
-            gl.bindFramebuffer(gl.FRAMEBUFFER, light.shadowFramebuffer)
-            gl.bindTexture(gl.TEXTURE_2D, light.shadowDepthTexture)
-            gl.viewport(0, 0, GLConstants.shadowDepthTextureSize, GLConstants.shadowDepthTextureSize)
-            gl.clearColor(1.0, 1.0, 1.0, 1.0)   // Clear to depth texture to white, no light occluders
-            gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
 
             if (thisScene.objects !== false) {
+                gShadowPass = 0
+                gl.bindFramebuffer(gl.FRAMEBUFFER, light.shadowFramebuffers[gShadowPass])
+                gl.bindTexture(gl.TEXTURE_2D, light.shadowDepthTextures[gShadowPass])
+                gl.clearColor(1.0, 1.0, 1.0, 1.0)   // Clear to depth texture to white, no light occluders
+                gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
+                
                 thisScene.objects.forEach(obj => {
                     if (obj.castShadows)
                         obj.render(gl, thisScene.shadowShader, light.worldToProjection, light.pos)
                 })
+
+                // gShadowPass = 1
+                // gl.bindFramebuffer(gl.FRAMEBUFFER, light.shadowFramebuffers[gShadowPass])
+                // gl.bindTexture(gl.TEXTURE_2D, light.shadowDepthTextures[gShadowPass])
+                // gl.clearColor(1.0, 1.0, 1.0, 1.0)   // Clear to depth texture to white, no light occluders
+                // gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT)
+                
+                // thisScene.objects.forEach(obj => {
+                //     if (obj.castShadows)
+                //         obj.render(gl, thisScene.shadowShader, light.worldToProjection, light.pos)
+                // })
             }
             gl.bindFramebuffer(gl.FRAMEBUFFER, null)
         })
